@@ -22,6 +22,7 @@ Image load_image_from_stdin(bool* out_was_file, const char** out_ext) {
   TraceLog(LOG_WARNING, "You are meant to provide an image via stdin.");
   TraceLog(LOG_WARNING, "Do: grim - | wayland-boomer");
   TraceLog(LOG_WARNING, "Or: wayland-boomer < image.png");
+  TraceLog(LOG_WARNING, "Check `man wayland-boomer` for documentation.");
 
   if (fstat(STDIN_FILENO, &st) == 0 && S_ISREG(st.st_mode)) {
     // stdin is a regular file: allocate the file size
