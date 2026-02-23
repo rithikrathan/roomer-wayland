@@ -1,15 +1,4 @@
-#include "./headers/args.h"
-#include "./headers/controls.h"
-#include "./headers/draw.h"
-#include "./headers/globals.h"
-#include "./headers/image.h"
-
-#include <math.h>
-#include <memory.h>
-#include <raylib.h>
-#include <raymath.h>
-#include <stdbool.h>
-#include <stdlib.h>
+#include "boomer.h"
 
 // clang-format off
 static const char* flashlight_frag_shader_source =
@@ -36,17 +25,14 @@ int main(int argc, char** argv) {
   SetTraceLogLevel(LOG_INFO);
 
   bool  was_file;
-  Image img = load_image_from_stdin(&was_file, NULL);
-  if (memcmp(&img, &(Image){0}, sizeof(Image)) == 0) return EXIT_FAILURE;
+  Image img = load_image_from_stdin(&was_file);
+  if (memcmp(&img, &(Image){ 0 }, sizeof(Image)) == 0) return EXIT_FAILURE;
 
   if (was_file) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(g_configuration->window_width, g_configuration->window_height, g_configuration->window_title_imagemode);
   } else {
-    SetConfigFlags(
-        FLAG_BORDERLESS_WINDOWED_MODE | FLAG_WINDOW_UNDECORATED | FLAG_WINDOW_TOPMOST | FLAG_WINDOW_TRANSPARENT |
-        FLAG_WINDOW_RESIZABLE
-    );
+    SetConfigFlags(FLAG_BORDERLESS_WINDOWED_MODE | FLAG_WINDOW_UNDECORATED | FLAG_WINDOW_TOPMOST | FLAG_WINDOW_TRANSPARENT | FLAG_WINDOW_RESIZABLE);
 
     // compensate for monitor scaling: compositor multiplies the window size by the scaling factor
     int window_width     = (int)roundf((float)img.width / g_configuration->monitor_scaling);
@@ -66,7 +52,7 @@ int main(int argc, char** argv) {
   int    loc_center        = GetShaderLocation(flashlight_shader, "center");
   int    loc_radius        = GetShaderLocation(flashlight_shader, "radius");
 
-  SetTargetFPS(60);
+  SetTargetFPS(120);
   while (!WindowShouldClose()) {
     if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) break;
     handle_inputs();
@@ -80,9 +66,9 @@ int main(int argc, char** argv) {
     BeginDrawing();
     if (g_state->flashlight_enabled) {
       Vector2 mouse_pos    = GetMousePosition();
-      float   u_center[2]  = {mouse_pos.x, (float)GetScreenHeight() - mouse_pos.y};
-      float   u_radius[1]  = {g_state->flashlight_radius};
-      int     u_texture[1] = {0};
+      float   u_center[2]  = { mouse_pos.x, (float)GetScreenHeight() - mouse_pos.y };
+      float   u_radius[1]  = { g_state->flashlight_radius };
+      int     u_texture[1] = { 0 };
       SetShaderValue(flashlight_shader, loc_center, u_center, SHADER_UNIFORM_VEC2);
       SetShaderValue(flashlight_shader, loc_radius, u_radius, SHADER_UNIFORM_FLOAT);
       SetShaderValue(flashlight_shader, loc_texture, u_texture, SHADER_UNIFORM_INT);
@@ -93,14 +79,12 @@ int main(int argc, char** argv) {
     ClearBackground(g_configuration->background_color);
     DrawTextureRec(
         img_render_texture.texture,
-        (Rectangle){0, 0, (float)img_render_texture.texture.width, (float)-img_render_texture.texture.height},
-        (Vector2){0, 0},
+        (Rectangle){ 0, 0, (float)img_render_texture.texture.width, (float)-img_render_texture.texture.height },
+        (Vector2){ 0, 0 },
         WHITE
     );
 
-    if (g_state->flashlight_enabled) {
-      EndShaderMode();
-    }
+    if (g_state->flashlight_enabled) EndShaderMode();
 
     EndDrawing();
   }

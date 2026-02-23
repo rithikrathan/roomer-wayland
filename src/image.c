@@ -1,17 +1,9 @@
-#include "./headers/image.h"
-
-#include <memory.h>
-#include <raylib.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "boomer.h"
 
 static const char* detect_image_extension(const unsigned char* data, size_t length);
 
-Image load_image_from_stdin(bool* out_was_file, const char** out_ext) {
-  struct stat    st       = {0};
+Image load_image_from_stdin(bool* out_was_file) {
+  struct stat    st       = { 0 };
   unsigned char* buffer   = NULL;
   size_t         length   = 0;
   size_t         capacity = 0;
@@ -73,10 +65,7 @@ Image load_image_from_stdin(bool* out_was_file, const char** out_ext) {
 
   ext = detect_image_extension(buffer, length);
   if (!ext) {
-    TraceLog(
-        LOG_ERROR,
-        "Could not detect image. Either you didn't provide a valid image or the image format is not supported."
-    );
+    TraceLog(LOG_ERROR, "Could not detect image. Either you didn't provide a valid image or the image format is not supported.");
     goto on_error;
   }
 
@@ -89,14 +78,12 @@ Image load_image_from_stdin(bool* out_was_file, const char** out_ext) {
   free(buffer);
 
   if (out_was_file) *out_was_file = is_file;
-  if (out_ext) *out_ext = ext;
   return img;
 
 on_error:
   free(buffer);
   if (out_was_file) *out_was_file = is_file;
-  if (out_ext) *out_ext = ext;
-  return (Image){0};
+  return (Image){ 0 };
 }
 
 static const char* detect_image_extension(const unsigned char* data, size_t length) {

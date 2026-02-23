@@ -1,10 +1,4 @@
-#include "./headers/globals.h"
-
-#include <assert.h>
-#include <raylib.h>
-#include <raymath.h>
-#include <stdbool.h>
-#include <stdlib.h>
+#include "boomer.h"
 
 typedef struct {
   Vector2* points;
@@ -17,10 +11,10 @@ static Line* lines          = NULL;
 static int   lines_count    = 0;
 static int   lines_capacity = 0;
 
-static Vector2 to_texture_coords(Vector2 screen_pos);
-static Vector2 to_screen_coords(Vector2 texture_pos);
 static void    line_begin(void);
 static void    line_add_point(Vector2 texture_pos);
+static Vector2 to_texture_coords(Vector2 screen_pos);
+static Vector2 to_screen_coords(Vector2 texture_pos);
 
 void handle_draw(void) {
   bool right_down = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
@@ -84,9 +78,7 @@ void lines_draw(void) {
 }
 
 void lines_clear(void) {
-  for (int i = 0; i < lines_count; i++) {
-    free(lines[i].points);
-  }
+  for (int i = 0; i < lines_count; i++) free(lines[i].points);
   free(lines);
   lines          = NULL;
   lines_count    = 0;
@@ -105,7 +97,7 @@ static void line_begin(void) {
 
   Line* new_line = &lines[lines_count++];
   *new_line      = (Line){
-           .thickness = g_configuration->draw_thickness / g_state->zoom,
+         .thickness = g_configuration->draw_thickness / g_state->zoom,
   };
 }
 

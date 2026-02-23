@@ -1,24 +1,14 @@
-#include "./headers/args.h"
-
-#include "./headers/globals.h"
-
-#include <assert.h>
-#include <errno.h>
-#include <raylib.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdnoreturn.h>
-#include <string.h>
+#include "boomer.h"
 
 #ifndef VERSION
 #define VERSION "unknown"
 #endif
 static const char* s_version = VERSION;
 
-#define shift(argc, argv)                                                                                              \
-  do {                                                                                                                 \
-    (argc)--;                                                                                                          \
-    (argv)++;                                                                                                          \
+#define shift(argc, argv)                                                                                                                            \
+  do {                                                                                                                                               \
+    (argc)--;                                                                                                                                        \
+    (argv)++;                                                                                                                                        \
   } while (0)
 
 static void          print_usage(FILE* sink);
@@ -41,9 +31,7 @@ void process_commandline_arguments(int argc, char** argv) {
     }
     if (strcmp(*argv, "-ms") == 0 || strcmp(*argv, "--monitor-scaling") == 0) {
       shift(argc, argv);
-      if (argc < 1) {
-        error_and_exit("Missing value for -mc/--monitor-scaling.");
-      }
+      if (argc < 1) { error_and_exit("Missing value for -mc/--monitor-scaling."); }
 
       errno              = 0;
       float parse_result = strtof(*argv, NULL);
@@ -58,13 +46,9 @@ void process_commandline_arguments(int argc, char** argv) {
     }
     if (strcmp(*argv, "-sd") == 0 || strcmp(*argv, "--screenshot-dir") == 0) {
       shift(argc, argv);
-      if (argc < 1) {
-        error_and_exit("Missing value for -sd/--screenshot-dir.");
-      }
+      if (argc < 1) { error_and_exit("Missing value for -sd/--screenshot-dir."); }
 
-      if (!DirectoryExists(*argv)) {
-        error_and_exit("Invalid value for -sd/--screenshot-dir. The directory does not exist.");
-      }
+      if (!DirectoryExists(*argv)) { error_and_exit("Invalid value for -sd/--screenshot-dir. The directory does not exist."); }
 
       g_args->screenshot_folder = *argv;
 
@@ -73,9 +57,7 @@ void process_commandline_arguments(int argc, char** argv) {
     }
     if (strcmp(*argv, "-bg") == 0 || strcmp(*argv, "--background") == 0) {
       shift(argc, argv);
-      if (argc < 1) {
-        error_and_exit("Missing value for -bg/--background.");
-      }
+      if (argc < 1) { error_and_exit("Missing value for -bg/--background."); }
 
       unsigned long parse_result = strtoul(*argv, NULL, 16);
       if (parse_result < 0 || parse_result > 0xFFFFFFFF || strlen(*argv) != 8) {
@@ -83,10 +65,10 @@ void process_commandline_arguments(int argc, char** argv) {
       }
 
       g_configuration->background_color = (Color){
-          .r = (unsigned char)((parse_result >> 24) & 0xFF),
-          .g = (unsigned char)((parse_result >> 16) & 0xFF),
-          .b = (unsigned char)((parse_result >> 8) & 0xFF),
-          .a = (unsigned char)(parse_result & 0xFF),
+        .r = (unsigned char)((parse_result >> 24) & 0xFF),
+        .g = (unsigned char)((parse_result >> 16) & 0xFF),
+        .b = (unsigned char)((parse_result >> 8) & 0xFF),
+        .a = (unsigned char)(parse_result & 0xFF),
       };
 
       shift(argc, argv);

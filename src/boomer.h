@@ -1,9 +1,22 @@
 #pragma once
 
-#include <raylib.h>
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE   700
 
-#ifndef __GLOBALS_H__
-#define __GLOBALS_H__
+#include <assert.h>
+#include <errno.h>
+#include <math.h>
+#include <memory.h>
+#include <raylib.h>
+#include <raymath.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdnoreturn.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
 
 typedef struct {
   Vector2 pan;
@@ -42,4 +55,11 @@ extern Configuration* g_configuration;
 extern Args*          g_args;
 extern State*         g_state;
 
-#endif // __GLOBALS_H__
+void process_commandline_arguments(int argc, char** argv);
+
+Image load_image_from_stdin(bool* out_was_file);
+
+void handle_inputs(void);
+void handle_draw(void);
+void lines_draw(void);
+void lines_clear(void);

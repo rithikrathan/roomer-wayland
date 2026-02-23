@@ -1,7 +1,7 @@
 BasedOnStyle: LLVM
 
 AlignAfterOpenBracket: BlockIndent
-AlignArrayOfStructures: Right
+AlignArrayOfStructures: Left
 AlignConsecutiveAssignments:
   Enabled: true
   AcrossEmptyLines: false
@@ -25,23 +25,20 @@ AlignTrailingComments:
   OverEmptyLines: 0
 AlignOperands: AlignAfterOperator
 AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: WithoutElse
-AllowShortFunctionsOnASingleLine: None
+AllowShortLoopsOnASingleLine: true
 BinPackArguments: false
+BinPackParameters: false
 BreakAfterAttributes: Always
-ColumnLimit: 120
-IndentWidth: 2
+BreakArrays: true
+ColumnLimit: 150
+Cpp11BracedListStyle: false
 IncludeBlocks: Regroup
-ForEachMacros:
-  [
-    range_for,
-    array_for,
-    array_for_reverse,
-    array_foreach,
-    array_foreach_reverse,
-    hmap_foreach_key,
-    hmap_foreach_value,
-    hset_foreach,
-  ]
+IndentCaseLabels: true
+IndentWidth: 2
 PointerAlignment: Left
-TypenameMacros: [derive_array, derive_hmap, derive_hset]
+SortIncludes: CaseInsensitive

@@ -23,6 +23,7 @@ install: $(EXEC)
 $(EXEC):
 	clang ./src/main.c ./src/globals.c ./src/args.c ./src/controls.c ./src/image.c ./src/draw.c \
 		-o $(EXEC) \
-		-std=c23 -pedantic -Wall -Wextra -Wpedantic -ggdb -O3 -Wno-gnu \
-		-flto -lm -lglfw -I./vendor/ -L./vendor/ -lraylib \
+		-std=c23 -pedantic -Wall -Wextra -Wpedantic -ggdb -O3 \
+		-flto -fPIE -lm -lglfw -I./vendor/ -L./vendor/ -lraylib \
+		-fcf-protection=full -fstack-protector-strong -fno-omit-frame-pointer \
 		-DVERSION="\"$(GIT_COMMIT)\""
