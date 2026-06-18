@@ -7,9 +7,9 @@ Configuration g_default_configuration = {
   .window_height           = 720,
   .monitor_scaling         = 1.0F,
   .background_color        = (Color){ 0, 0, 0, 0 },
-  .zoom_min                = 0.25F,
-  .zoom_max                = 20.0F,
-  .zoom_step               = 0.2F,
+  .zoom_min                = 0.69F,
+  .zoom_max                = 30.0F,
+  .zoom_step               = 0.16F,
   .flashlight_radius_min   = 20.0F,
   .flashlight_radius_max   = 600.0F,
   .flashlight_radius_step  = 20.0F,
@@ -23,18 +23,18 @@ Args g_default_args = {
 };
 
 State g_initial_state = {
-  .pan                     = { 0, 0 },
-  .target_pan              = { 0, 0 },
-  .zoom                    = 1.0F,
-  .target_zoom             = 1.0F,
-  .flashlight_enabled       = false,
-  .flashlight_rendering     = false,
-  .flashlight_prev_enabled  = false,
+  .pan                       = { 0, 0 },
+  .target_pan                = { 0, 0 },
+  .zoom                      = 1.0F,
+  .target_zoom               = 1.0F,
+  .flashlight_enabled        = false,
+  .flashlight_rendering      = false,
+  .flashlight_prev_enabled   = false,
   .flashlight_radius         = 100.0F,
   .flashlight_display_radius = 100.0F,
-  .flashlight_darkness       = 0.1F,
-  .target_flashlight_radius  = 100.0F,
-  .is_drawing              = false,
+  .flashlight_darkness       = 0.069F,
+  .target_flashlight_radius  = 200.0F,
+  .is_drawing                = false,
 };
 
 Configuration* g_configuration = NULL;

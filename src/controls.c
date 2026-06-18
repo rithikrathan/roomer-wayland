@@ -42,7 +42,8 @@ static void handle_zoom(void) {
     Vector2 mouse_pos      = GetMousePosition();
     float   prev_zoom      = g_state->zoom;
     Vector2 world          = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
-    g_state->target_zoom   = Clamp(g_state->target_zoom + mouse_wheel_delta * g_configuration->zoom_step, g_configuration->zoom_min, g_configuration->zoom_max);
+    float zoom_multiplier = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
+    g_state->target_zoom   = Clamp(g_state->target_zoom + mouse_wheel_delta * g_configuration->zoom_step * zoom_multiplier, g_configuration->zoom_min, g_configuration->zoom_max);
     g_state->target_pan.x  = mouse_pos.x - world.x * g_state->target_zoom;
     g_state->target_pan.y  = mouse_pos.y - world.y * g_state->target_zoom;
   }

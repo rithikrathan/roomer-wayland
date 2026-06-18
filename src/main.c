@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
     InitWindow(window_width, window_height, g_configuration->window_title_boomermode);
   }
 
-  Texture2D       img_texture        = LoadTextureFromImage(img);
+  Texture2D img_texture = LoadTextureFromImage(img);
   SetTextureFilter(img_texture, TEXTURE_FILTER_BILINEAR);
   RenderTexture2D img_render_texture = LoadRenderTexture(img.width, img.height);
   SetTextureFilter(img_render_texture.texture, TEXTURE_FILTER_BILINEAR);
@@ -61,23 +61,23 @@ int main(int argc, char** argv) {
     if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) break;
     handle_inputs();
 
-    float dt      = GetFrameTime();
-    float z_speed = 1.0F - expf(-15.0F * dt);
+    float dt       = GetFrameTime();
+    float z_speed  = 1.0F - expf(-15.0F * dt);
     g_state->zoom  = Lerp(g_state->zoom, g_state->target_zoom, z_speed);
     g_state->pan.x = Lerp(g_state->pan.x, g_state->target_pan.x, z_speed);
     g_state->pan.y = Lerp(g_state->pan.y, g_state->target_pan.y, z_speed);
 
     // Smooth scroll: always keep flashlight_radius chasing target_flashlight_radius
-    float r_smooth = 1.0F - expf(-15.0F * dt);
+    float r_smooth             = 1.0F - expf(-15.0F * dt);
     g_state->flashlight_radius = Lerp(g_state->flashlight_radius, g_state->target_flashlight_radius, r_smooth);
 
     // Flashlight on/off animation
     {
-      float r_fast = 1.0F - expf(-30.0F * dt);
+      float r_fast = 1.0F - expf(-15.0F * dt);
       float r_slow = 1.0F - expf(-20.0F * dt);
-      float a_slow = 1.0F - expf(-18.0F * dt);
+      float a_slow = 1.0F - expf(-10.0F * dt);
 
-      float big = g_state->flashlight_radius + 500.0F;
+      float big = g_state->flashlight_radius + 250.0F;
 
       if (!g_state->flashlight_prev_enabled && g_state->flashlight_enabled) {
         g_state->flashlight_display_radius = big;
@@ -87,13 +87,13 @@ int main(int argc, char** argv) {
 
       if (g_state->flashlight_rendering) {
         if (g_state->flashlight_enabled) {
-          float speed = g_state->flashlight_display_radius > g_state->flashlight_radius ? r_fast : r_slow;
+          float speed                        = g_state->flashlight_display_radius > g_state->flashlight_radius ? r_fast : r_slow;
           g_state->flashlight_display_radius = Lerp(g_state->flashlight_display_radius, g_state->flashlight_radius, speed);
           g_state->flashlight_darkness       = Lerp(g_state->flashlight_darkness, 0.1F, a_slow);
         } else {
           g_state->flashlight_display_radius = Lerp(g_state->flashlight_display_radius, big, r_slow);
           g_state->flashlight_darkness       = Lerp(g_state->flashlight_darkness, 1.0F, a_slow);
-          if (g_state->flashlight_display_radius >= big - 5.0F && g_state->flashlight_darkness >= 0.95F) {
+          if (g_state->flashlight_display_radius >= big - 2.0F && g_state->flashlight_darkness >= 0.95F) {
             g_state->flashlight_display_radius = g_state->flashlight_radius;
             g_state->flashlight_darkness       = 0.1F;
             g_state->flashlight_rendering      = false;
@@ -112,11 +112,11 @@ int main(int argc, char** argv) {
 
     BeginDrawing();
     if (g_state->flashlight_rendering) {
-      Vector2 mouse_pos      = GetMousePosition();
-      float   u_center[2]    = { mouse_pos.x, (float)GetScreenHeight() - mouse_pos.y };
-      float   u_radius[1]    = { g_state->flashlight_display_radius };
-      float   u_darkness[1]  = { g_state->flashlight_darkness };
-      int     u_texture[1]   = { 0 };
+      Vector2 mouse_pos     = GetMousePosition();
+      float   u_center[2]   = { mouse_pos.x, (float)GetScreenHeight() - mouse_pos.y };
+      float   u_radius[1]   = { g_state->flashlight_display_radius };
+      float   u_darkness[1] = { g_state->flashlight_darkness };
+      int     u_texture[1]  = { 0 };
       SetShaderValue(flashlight_shader, loc_center, u_center, SHADER_UNIFORM_VEC2);
       SetShaderValue(flashlight_shader, loc_radius, u_radius, SHADER_UNIFORM_FLOAT);
       SetShaderValue(flashlight_shader, loc_darkness, u_darkness, SHADER_UNIFORM_FLOAT);

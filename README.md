@@ -54,6 +54,7 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 | `0`                     | Reset                                                   |
 | Left Mouse Button Drag  | Pan                                                     |
 | Mouse Wheel             | Zoom In/Out                                             |
+| `SHIFT` + Mouse Wheel   | Zoom In/Out (3x slower, finer control)                  |
 | `f`                     | Toggle Flashlight                                       |
 | `CTRL` + Mouse Wheel    | Change Flashlight Radius                                |
 | `s`                     | Take a Screenshot to Clipboard (needs wl-copy)          |
