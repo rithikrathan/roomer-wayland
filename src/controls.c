@@ -10,10 +10,17 @@ static void handle_panning(void);
 static void handle_zoom(void);
 static void handle_flashlight(void);
 static void handle_screenshot(void);
+static void handle_undo(void);
+static void handle_redo(void);
+static void handle_toolbox(void);
 
 void handle_inputs(void) {
+  handle_toolbox();
+  if (g_state->toolbox_open) toolbox_handle_input();
   handle_reset();
   handle_panning();
+  handle_undo();
+  handle_redo();
   handle_zoom();
   handle_flashlight();
   handle_screenshot();
@@ -22,23 +29,37 @@ void handle_inputs(void) {
 
 static void handle_reset(void) {
   if (IsKeyPressed(KEY_ZERO)) {
+    bool     saved_toolbox     = g_state->toolbox_open;
+    ToolType saved_tool        = g_state->current_tool;
+    float    saved_pen_size    = g_state->tool_pen_size;
+    float    saved_eraser_size = g_state->tool_eraser_size;
+    Color    saved_color       = g_configuration->draw_color;
+
     *g_state            = g_initial_state;
     s_flashlight_manual = false;
     lines_clear();
+
+    g_state->toolbox_open     = saved_toolbox;
+    g_state->current_tool     = saved_tool;
+    g_state->tool_pen_size    = saved_pen_size;
+    g_state->tool_eraser_size = saved_eraser_size;
+    g_configuration->draw_color = saved_color;
   }
 }
 
 static void handle_panning(void) {
-  if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !g_state->is_drawing) {
-    Vector2 mouse_delta    = GetMouseDelta();
-    g_state->target_pan.x += mouse_delta.x;
-    g_state->target_pan.y += mouse_delta.y;
-  }
+  if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) return;
+  if (g_state->is_drawing) return;
+  if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
+
+  Vector2 mouse_delta    = GetMouseDelta();
+  g_state->target_pan.x += mouse_delta.x;
+  g_state->target_pan.y += mouse_delta.y;
 }
 
 static void handle_zoom(void) {
   float mouse_wheel_delta = GetMouseWheelMove();
-  if (mouse_wheel_delta != 0 && !g_state->is_drawing && !IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_RIGHT_CONTROL)) {
+  if (mouse_wheel_delta != 0 && !g_state->is_drawing && !g_state->flashlight_enabled) {
     Vector2 mouse_pos       = GetMousePosition();
     float   prev_zoom       = g_state->zoom;
     Vector2 world           = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
@@ -54,14 +75,12 @@ static void handle_zoom(void) {
 }
 
 static void handle_flashlight(void) {
-  bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-
   if (IsKeyPressed(KEY_F)) { s_flashlight_manual = !s_flashlight_manual; }
 
-  g_state->flashlight_enabled = s_flashlight_manual || ctrl_down;
+  g_state->flashlight_enabled = s_flashlight_manual;
 
   float mouse_wheel_delta = GetMouseWheelMove();
-  if (g_state->flashlight_enabled && mouse_wheel_delta != 0 && ctrl_down) {
+  if (g_state->flashlight_enabled && mouse_wheel_delta != 0) {
     g_state->target_flashlight_radius -= mouse_wheel_delta * g_configuration->flashlight_radius_step;
     g_state->target_flashlight_radius =
         Clamp(g_state->target_flashlight_radius, g_configuration->flashlight_radius_min, g_configuration->flashlight_radius_max);
@@ -69,7 +88,7 @@ static void handle_flashlight(void) {
 }
 
 // this is essentially raylib's TakeScreenshot() and ExportImage() decomposed
-void handle_screenshot(void) {
+static void handle_screenshot(void) {
   if (IsKeyDown(KEY_S)) {
     bool should_save_to_file = false;
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) should_save_to_file = true;
@@ -153,4 +172,19 @@ void handle_screenshot(void) {
     RL_FREE(image_bytes_png);
     UnloadImage(image);
   }
+}
+
+static void handle_undo(void) {
+  if (IsKeyPressed(KEY_Z) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) lines_undo();
+}
+
+static void handle_redo(void) {
+  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+  if (ctrl && IsKeyPressed(KEY_Y)) { lines_redo(); return; }
+  bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+  if (ctrl && shift && IsKeyPressed(KEY_Z)) { lines_redo(); }
+}
+
+static void handle_toolbox(void) {
+  if (IsKeyPressed(KEY_T)) toolbox_toggle();
 }

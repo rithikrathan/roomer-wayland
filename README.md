@@ -50,15 +50,18 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 | Input                   | Action                                                  |
 | ----------------------- | ------------------------------------------------------- |
 | `ESC` or `q`            | Quit                                                    |
-| `0`                     | Reset                                                   |
+| `0`                     | Reset view                                              |
 | Left Mouse Button Drag  | Pan                                                     |
 | Mouse Wheel             | Zoom In/Out                                             |
 | `SHIFT` + Mouse Wheel   | Zoom In/Out (3x slower, finer control)                  |
 | `f`                     | Toggle Flashlight                                       |
-| `CTRL` + Mouse Wheel    | Change Flashlight Radius                                |
+| Mouse Wheel (flashlight on) | Change Flashlight Radius                            |
 | `s`                     | Take a Screenshot to Clipboard (needs wl-copy)          |
 | `CTRL` + `s`            | Take a Screenshot to File (to $XDG_PICTURE_DIR / $HOME) |
-| Right Mouse Button Drag | Draw                                                    |
+| Right Mouse Button      | Pen: draw / Eraser: delete stroke under cursor          |
+| `t`                     | Toggle toolbox (Pen/Eraser tool, size, color palette)   |
+| `CTRL` + `z`            | Undo last stroke                                        |
+| `CTRL` + `y` / `SHIFT` + `CTRL` + `z` | Redo last undone stroke                       |
 
 ## Installation
 

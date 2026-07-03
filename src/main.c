@@ -44,6 +44,9 @@ int main(int argc, char** argv) {
     InitWindow(window_width, window_height, g_configuration->window_title_roomermode);
   }
 
+  g_state->image_w = img.width;
+  g_state->image_h = img.height;
+
   Texture2D img_texture = LoadTextureFromImage(img);
   SetTextureFilter(img_texture, TEXTURE_FILTER_POINT);
   RenderTexture2D img_render_texture = LoadRenderTexture(img.width, img.height);
@@ -135,6 +138,7 @@ int main(int argc, char** argv) {
 
     if (g_state->flashlight_rendering) EndShaderMode();
 
+    toolbox_render();
     EndDrawing();
   }
 

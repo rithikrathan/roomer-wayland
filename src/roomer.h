@@ -18,6 +18,11 @@
 #include <time.h>
 #include <unistd.h>
 
+typedef enum {
+  TOOL_PEN,
+  TOOL_ERASER,
+} ToolType;
+
 typedef struct {
   Vector2 pan;
   Vector2 target_pan;
@@ -31,6 +36,12 @@ typedef struct {
   float   flashlight_darkness;
   float   target_flashlight_radius;
   bool    is_drawing;
+  bool    toolbox_open;
+  ToolType current_tool;
+  float   tool_pen_size;
+  float   tool_eraser_size;
+  int     image_w;
+  int     image_h;
 } State;
 
 typedef struct {
@@ -70,3 +81,12 @@ void handle_inputs(void);
 void handle_draw(void);
 void lines_draw(void);
 void lines_clear(void);
+void lines_undo(void);
+void lines_redo(void);
+void lines_erase_at(Vector2 screen_pos);
+
+void toolbox_toggle(void);
+bool toolbox_is_open(void);
+bool toolbox_is_mouse_over(void);
+void toolbox_handle_input(void);
+void toolbox_render(void);

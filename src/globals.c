@@ -35,6 +35,10 @@ State g_initial_state = {
   .flashlight_darkness       = 0.069F,
   .target_flashlight_radius  = 200.0F,
   .is_drawing                = false,
+  .toolbox_open              = false,
+  .current_tool              = TOOL_PEN,
+  .tool_pen_size             = 3.5F,
+  .tool_eraser_size          = 20.0F,
 };
 
 Configuration* g_configuration = NULL;
