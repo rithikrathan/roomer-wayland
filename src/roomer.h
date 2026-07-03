@@ -39,7 +39,7 @@ typedef struct {
 } Args;
 
 typedef struct {
-  char* window_title_boomermode;
+  char* window_title_roomermode;
   char* window_title_imagemode;
   int   window_width;
   int   window_height;

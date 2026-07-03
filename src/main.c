@@ -1,4 +1,4 @@
-#include "boomer.h"
+#include "roomer.h"
 
 // clang-format off
 static const char* flashlight_frag_shader_source =
@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
     g_state->zoom        = 1 / g_configuration->monitor_scaling;
     g_initial_state.zoom = g_state->zoom;
 
-    InitWindow(window_width, window_height, g_configuration->window_title_boomermode);
+    InitWindow(window_width, window_height, g_configuration->window_title_roomermode);
   }
 
   Texture2D img_texture = LoadTextureFromImage(img);

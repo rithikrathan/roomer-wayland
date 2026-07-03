@@ -1,4 +1,4 @@
-#include "boomer.h"
+#include "roomer.h"
 
 static const char* detect_image_extension(const unsigned char* data, size_t length);
 
@@ -12,9 +12,9 @@ Image load_image_from_stdin(bool* out_was_file) {
 
   TraceLog(LOG_WARNING, "If this is the last message you see, you're probably doing something wrong.");
   TraceLog(LOG_WARNING, "You are meant to provide an image via stdin.");
-  TraceLog(LOG_WARNING, "Do: grim - | wayland-boomer");
-  TraceLog(LOG_WARNING, "Or: wayland-boomer < image.png");
-  TraceLog(LOG_WARNING, "Check `man wayland-boomer` for documentation.");
+  TraceLog(LOG_WARNING, "Do: grim - | roomer");
+  TraceLog(LOG_WARNING, "Or: roomer < image.png");
+  TraceLog(LOG_WARNING, "Check `man roomer` for documentation.");
 
   if (fstat(STDIN_FILENO, &st) == 0 && S_ISREG(st.st_mode)) {
     // stdin is a regular file: allocate the file size

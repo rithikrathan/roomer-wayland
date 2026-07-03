@@ -1,4 +1,4 @@
-#include "boomer.h"
+#include "roomer.h"
 
 // from stb_image_write.h, which is part of raylib
 extern unsigned char* stbi_write_png_to_mem(const unsigned char* pixels, int stride_bytes, int x, int y, int n, int* out_len);
@@ -117,7 +117,7 @@ void handle_screenshot(void) {
       SetRandomSeed(time(NULL));
       int  nonce = GetRandomValue(1000000, 99999999);
       char file_name[1024];
-      (void)sprintf(file_name, "%s/wayboomer_screenshot_%d.png", folder, nonce);
+      (void)sprintf(file_name, "%s/roomer_screenshot_%d.png", folder, nonce);
 
       bool result = SaveFileData(file_name, image_bytes_png, (int)fize_size);
       if (!result) {
