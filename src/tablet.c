@@ -12,6 +12,7 @@ TabletState g_tablet = { 0 };
 
 static int   s_fd            = -1;
 static int   s_pressure_max  = 0;
+static bool  s_prev_pressed  = false;
 
 // ── helpers ─────────────────────────────────────────────────
 
@@ -60,15 +61,26 @@ void tablet_init(void) {
 void tablet_poll(void) {
   if (s_fd < 0) return;
 
+  g_tablet.pen_just_pressed = false;
+
   struct input_event ev;
-  while (read(s_fd, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) {
+  int read_errno = 0;
+
+  while (1) {
+    ssize_t n = read(s_fd, &ev, sizeof(ev));
+    if (n != (ssize_t)sizeof(ev)) {
+      if (n < 0) read_errno = errno;
+      break;
+    }
+
     switch (ev.type) {
       case EV_KEY:
         switch (ev.code) {
-          case BTN_TOUCH:   g_tablet.touching = ev.value; break;
-          case BTN_STYLUS:  g_tablet.button1  = ev.value; break;
-          case BTN_STYLUS2: g_tablet.button2  = ev.value; break;
-          case BTN_TOOL_PEN: g_tablet.active  = ev.value; break;
+          case BTN_TOUCH:    g_tablet.touching = ev.value; break;
+          case 0x141:        g_tablet.button3  = ev.value; break;
+          case BTN_STYLUS:   g_tablet.button1  = ev.value; break;
+          case BTN_STYLUS2:  g_tablet.button2  = ev.value; break;
+          case BTN_TOOL_PEN: g_tablet.active   = ev.value; break;
         }
         break;
       case EV_ABS:
@@ -79,12 +91,17 @@ void tablet_poll(void) {
         break;
     }
   }
-  // EAGAIN/EWOULDBLOCK means no more events — normal
-  if (errno != EAGAIN && errno != EWOULDBLOCK) {
+
+  if (read_errno != 0 && read_errno != EAGAIN && read_errno != EWOULDBLOCK) {
     close(s_fd);
     s_fd = -1;
     memset(&g_tablet, 0, sizeof(g_tablet));
+    return;
   }
+
+  bool pressed = g_tablet.touching || g_tablet.pressure > 0.01f;
+  if (pressed && !s_prev_pressed) g_tablet.pen_just_pressed = true;
+  s_prev_pressed = pressed;
 }
 
 void tablet_cleanup(void) {

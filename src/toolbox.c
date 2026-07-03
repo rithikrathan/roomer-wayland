@@ -36,8 +36,8 @@ static Color color_presets[8] = {
 #define SWATCH_GAP  8
 
 #define CLEAR_W     54
-#define FIT_W       56
 #define CLEAR_FIT_GAP 8
+#define FIT_W       56
 
 // ── helpers ─────────────────────────────────────────────────
 
@@ -187,7 +187,7 @@ bool toolbox_is_mouse_over(void) {
 
 void toolbox_handle_input(void) {
   if (!g_state->toolbox_open) return;
-  if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+  if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !g_tablet.pen_just_pressed) return;
 
   Vector2 m = GetMousePosition();
   if (!CheckCollisionPointRec(m, bar_rect())) return;
@@ -240,7 +240,6 @@ void toolbox_handle_input(void) {
   if (CheckCollisionPointRec(m, (Rectangle){ cx, by, CLEAR_W, BTN_H })) { lines_clear(); return; }
   cx += CLEAR_W + CLEAR_FIT_GAP;
 
-  // Fit to screen
   if (CheckCollisionPointRec(m, (Rectangle){ cx, by, FIT_W, BTN_H })) {
     if (g_state->image_w > 0 && g_state->image_h > 0) {
       float fw = (float)GetScreenWidth();
@@ -328,7 +327,7 @@ void toolbox_render(void) {
   txt(cx, ty, "|", (Color){ 80, 80, 80, 255 });
   cx += SEP_W + GAP_MD;
 
-  // ── Clear All ──────────────────────────────────────────────
+  // ── Clear All ─────────────────────────────────────────────
   draw_icon_or_text(cx, by, CLEAR_W, trash_tex, "Clear", inactive_bg);
   update_tooltip("Clear all strokes", (Rectangle){ cx, by, CLEAR_W, BTN_H });
   cx += CLEAR_W + CLEAR_FIT_GAP;

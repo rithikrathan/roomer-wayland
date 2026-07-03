@@ -12,18 +12,6 @@ static Line* lines          = NULL;
 static int   lines_count    = 0;
 static int   lines_capacity = 0;
 
-static Line* redo_lines          = NULL;
-static int   redo_count    = 0;
-static int   redo_capacity = 0;
-
-static void redo_clear(void) {
-  for (int i = 0; i < redo_count; i++) free(redo_lines[i].points);
-  free(redo_lines);
-  redo_lines    = NULL;
-  redo_count    = 0;
-  redo_capacity = 0;
-}
-
 static void    line_begin(void);
 static void    line_add_point(Vector2 texture_pos);
 static Vector2 to_texture_coords(Vector2 screen_pos);
@@ -32,9 +20,12 @@ static float   dist_to_segment(Vector2 p, Vector2 a, Vector2 b);
 
 void handle_draw(void) {
   bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-  bool right_down = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
-  bool pen_down   = g_tablet.touching && !g_tablet.button1 && !g_tablet.button2 && !ctrl;
-  bool should_draw = right_down || pen_down;
+  bool right_held = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+
+  if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
+  bool pen_down   = (g_tablet.touching || g_tablet.pressure > 0.01f)
+                    && !g_tablet.button1 && !g_tablet.button2 && !g_tablet.button3 && !ctrl;
+  bool should_draw = right_held || pen_down;
 
   if (should_draw && !g_state->is_drawing) {
     if (g_state->current_tool == TOOL_ERASER) {
@@ -45,7 +36,7 @@ void handle_draw(void) {
     }
   }
 
-  if (g_state->is_drawing && !right_down && !pen_down) {
+  if (g_state->is_drawing && !right_held && !pen_down) {
     g_state->is_drawing = false;
   }
 
@@ -106,41 +97,6 @@ void lines_clear(void) {
   lines          = NULL;
   lines_count    = 0;
   lines_capacity = 0;
-  redo_clear();
-}
-
-void lines_undo(void) {
-  if (lines_count == 0) return;
-  Line* src = &lines[lines_count - 1];
-
-  if (redo_count >= redo_capacity) {
-    int   new_cap = (redo_capacity == 0) ? 4 : redo_capacity * 2;
-    Line* p       = realloc(redo_lines, sizeof(Line) * new_cap);
-    assert(p);
-    redo_lines    = p;
-    redo_capacity = new_cap;
-  }
-  redo_lines[redo_count] = *src;
-  redo_count++;
-
-  free(src->points);
-  lines_count--;
-}
-
-void lines_redo(void) {
-  if (redo_count == 0) return;
-  Line* src = &redo_lines[redo_count - 1];
-
-  if (lines_count >= lines_capacity) {
-    int   new_cap = (lines_capacity == 0) ? 4 : lines_capacity * 2;
-    Line* p       = realloc(lines, sizeof(Line) * new_cap);
-    assert(p);
-    lines          = p;
-    lines_capacity = new_cap;
-  }
-  lines[lines_count] = *src;
-  lines_count++;
-  redo_count--;
 }
 
 void lines_erase_at(Vector2 screen_pos) {
@@ -170,7 +126,6 @@ void lines_erase_at(Vector2 screen_pos) {
 }
 
 static void line_begin(void) {
-  redo_clear();
   if (lines_count >= lines_capacity) {
     int   new_lines_capacity = (lines_capacity == 0) ? 4 : lines_capacity * 2;
     Line* new_lines          = realloc(lines, sizeof(Line) * new_lines_capacity);

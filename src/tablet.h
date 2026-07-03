@@ -8,6 +8,8 @@ typedef struct {
   bool  touching;
   bool  button1;
   bool  button2;
+  bool  button3;
+  bool  pen_just_pressed;
   bool  active;
 } TabletState;
 

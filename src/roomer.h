@@ -83,8 +83,6 @@ void handle_inputs(void);
 void handle_draw(void);
 void lines_draw(void);
 void lines_clear(void);
-void lines_undo(void);
-void lines_redo(void);
 void lines_erase_at(Vector2 screen_pos);
 
 void toolbox_toggle(void);

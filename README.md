@@ -60,8 +60,6 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 | `CTRL` + `s`            | Take a Screenshot to File (to $XDG_PICTURE_DIR / $HOME) |
 | Right Mouse Button      | Pen: draw / Eraser: delete stroke under cursor          |
 | `t`                     | Toggle toolbox (Pen/Eraser tool, size, color palette)   |
-| `CTRL` + `z`            | Undo last stroke                                        |
-| `CTRL` + `y` / `SHIFT` + `CTRL` + `z` | Redo last undone stroke                       |
 
 ## Installation
 

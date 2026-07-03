@@ -11,8 +11,6 @@ static void handle_zoom(void);
 static void handle_tablet_zoom(void);
 static void handle_flashlight(void);
 static void handle_screenshot(void);
-static void handle_undo(void);
-static void handle_redo(void);
 static void handle_toolbox(void);
 
 void handle_inputs(void) {
@@ -21,8 +19,6 @@ void handle_inputs(void) {
   if (g_state->toolbox_open) toolbox_handle_input();
   handle_reset();
   handle_panning();
-  handle_undo();
-  handle_redo();
   handle_zoom();
   handle_tablet_zoom();
   handle_flashlight();
@@ -214,17 +210,6 @@ static void handle_screenshot(void) {
     RL_FREE(image_bytes_png);
     UnloadImage(image);
   }
-}
-
-static void handle_undo(void) {
-  if (IsKeyPressed(KEY_Z) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) lines_undo();
-}
-
-static void handle_redo(void) {
-  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-  if (ctrl && IsKeyPressed(KEY_Y)) { lines_redo(); return; }
-  bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-  if (ctrl && shift && IsKeyPressed(KEY_Z)) { lines_redo(); }
 }
 
 static void handle_toolbox(void) {
