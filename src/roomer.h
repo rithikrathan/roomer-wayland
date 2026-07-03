@@ -18,6 +18,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "tablet.h"
+
 typedef enum {
   TOOL_PEN,
   TOOL_ERASER,

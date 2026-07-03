@@ -31,9 +31,12 @@ static Vector2 to_screen_coords(Vector2 texture_pos);
 static float   dist_to_segment(Vector2 p, Vector2 a, Vector2 b);
 
 void handle_draw(void) {
+  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   bool right_down = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
+  bool pen_down   = g_tablet.touching && !g_tablet.button1 && !g_tablet.button2 && !ctrl;
+  bool should_draw = right_down || pen_down;
 
-  if (right_down && !g_state->is_drawing) {
+  if (should_draw && !g_state->is_drawing) {
     if (g_state->current_tool == TOOL_ERASER) {
       lines_erase_at(GetMousePosition());
     } else {
@@ -42,7 +45,7 @@ void handle_draw(void) {
     }
   }
 
-  if (g_state->is_drawing && !right_down) {
+  if (g_state->is_drawing && !right_down && !pen_down) {
     g_state->is_drawing = false;
   }
 
@@ -177,11 +180,16 @@ static void line_begin(void) {
     lines_capacity = new_lines_capacity;
   }
 
-  float size = (g_state->current_tool == TOOL_PEN) ? g_state->tool_pen_size : g_state->tool_eraser_size;
+  float base_size = (g_state->current_tool == TOOL_PEN) ? g_state->tool_pen_size : g_state->tool_eraser_size;
+
+  if (g_state->current_tool == TOOL_PEN && g_tablet.present) {
+    base_size *= (0.3F + 0.7F * g_tablet.pressure);
+    if (base_size < 1.0F) base_size = 1.0F;
+  }
 
   Line* new_line = &lines[lines_count++];
   *new_line      = (Line){
-    .thickness = size / g_state->zoom,
+    .thickness = base_size / g_state->zoom,
     .color     = g_configuration->draw_color,
   };
 }

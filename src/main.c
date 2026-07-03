@@ -47,6 +47,8 @@ int main(int argc, char** argv) {
   g_state->image_w = img.width;
   g_state->image_h = img.height;
 
+  tablet_init();
+
   Texture2D img_texture = LoadTextureFromImage(img);
   SetTextureFilter(img_texture, TEXTURE_FILTER_POINT);
   RenderTexture2D img_render_texture = LoadRenderTexture(img.width, img.height);
@@ -142,6 +144,7 @@ int main(int argc, char** argv) {
     EndDrawing();
   }
 
+  tablet_cleanup();
   UnloadShader(flashlight_shader);
   UnloadRenderTexture(img_render_texture);
   UnloadTexture(img_texture);

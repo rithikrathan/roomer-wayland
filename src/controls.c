@@ -8,6 +8,7 @@ static bool s_flashlight_manual = false;
 static void handle_reset(void);
 static void handle_panning(void);
 static void handle_zoom(void);
+static void handle_tablet_zoom(void);
 static void handle_flashlight(void);
 static void handle_screenshot(void);
 static void handle_undo(void);
@@ -15,6 +16,7 @@ static void handle_redo(void);
 static void handle_toolbox(void);
 
 void handle_inputs(void) {
+  tablet_poll();
   handle_toolbox();
   if (g_state->toolbox_open) toolbox_handle_input();
   handle_reset();
@@ -22,6 +24,7 @@ void handle_inputs(void) {
   handle_undo();
   handle_redo();
   handle_zoom();
+  handle_tablet_zoom();
   handle_flashlight();
   handle_screenshot();
   handle_draw();
@@ -48,9 +51,16 @@ static void handle_reset(void) {
 }
 
 static void handle_panning(void) {
-  if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) return;
   if (g_state->is_drawing) return;
   if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
+
+  bool mouse_pan = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+  bool pen_pan   = g_tablet.present && g_tablet.button1;
+
+  // Block mouse pan while pen is touching (pen draws, doesn't pan)
+  if (mouse_pan && g_tablet.present && g_tablet.touching) return;
+
+  if (!mouse_pan && !pen_pan) return;
 
   Vector2 mouse_delta    = GetMouseDelta();
   g_state->target_pan.x += mouse_delta.x;
@@ -73,6 +83,38 @@ static void handle_zoom(void) {
     g_state->target_pan.y = mouse_pos.y - world.y * g_state->target_zoom;
   }
 }
+
+// ── zoom via tablet ─────────────────────────────────────────
+
+static bool    s_tablet_zooming  = false;
+static float   s_zoom_ref_y      = 0.0F;
+
+static void handle_tablet_zoom(void) {
+  if (!g_tablet.present) return;
+
+  bool ctrl    = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+  bool zoom_on = (ctrl && g_tablet.touching) || g_tablet.button2;
+
+  if (zoom_on) {
+    if (!s_tablet_zooming) {
+      s_tablet_zooming = true;
+      s_zoom_ref_y     = GetMousePosition().y;
+    } else {
+      float dy         = s_zoom_ref_y - GetMousePosition().y;
+      s_zoom_ref_y     = GetMousePosition().y;
+      float zoom_mult  = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
+      g_state->target_zoom = Clamp(
+          g_state->target_zoom + dy * g_configuration->zoom_step * zoom_mult * 0.05F,
+          g_configuration->zoom_min,
+          g_configuration->zoom_max
+      );
+    }
+  } else {
+    s_tablet_zooming = false;
+  }
+}
+
+// ── flashlight ──────────────────────────────────────────────
 
 static void handle_flashlight(void) {
   if (IsKeyPressed(KEY_F)) { s_flashlight_manual = !s_flashlight_manual; }
