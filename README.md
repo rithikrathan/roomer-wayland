@@ -13,7 +13,7 @@
 
 ```sh
 Usage:
-  grim - | ./roomer [options]                        Boomer Mode
+  grim - | ./roomer [options]                        Roomer Mode
   ./roomer [options] < image.[png|jpg|webp|bmp]      Image Viewer Mode
 Options:
   -h,             --help                                     Show this message and exit.
@@ -65,8 +65,8 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 Build it from source:
 
 ```sh
-git clone https://github.com/lsck0/roomer.git
-cd roomer
+git clone https://github.com/rithikrathan/roomer-wayland.git
+cd roomer-wayland
 make build
 ```
 

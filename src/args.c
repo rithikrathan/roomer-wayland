@@ -82,7 +82,7 @@ static void print_usage(FILE* sink) {
 
   // clang-format off
   (void)fprintf(sink, "Usage: \n");
-  (void)fprintf(sink, "  grim - | %s [options]                        Boomer Mode\n", g_args->program_name);
+  (void)fprintf(sink, "  grim - | %s [options]                        Roomer Mode\n", g_args->program_name);
   (void)fprintf(sink, "  %s [options] < image.[png|jpg|webp|bmp]      Image Viewer Mode\n", g_args->program_name);
   (void)fprintf(sink, "Options:\n");
   (void)fprintf(sink, "  -h,             --help                    %*s Show this message and exit.\n", (int)strlen(g_args->program_name), " ");

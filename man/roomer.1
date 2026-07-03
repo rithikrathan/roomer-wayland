@@ -5,7 +5,7 @@ roomer \- zoomer application for linux
 Usage:
 .PP
 .nf
-  grim - | ./roomer [options]                        Boomer Mode
+  grim - | ./roomer [options]                        Roomer Mode
   ./roomer [options] < image.[png|jpg|webp|bmp]      Image Viewer Mode
 .fi
 .SH OPTIONS
@@ -62,19 +62,12 @@ CTRL + s|Take a Screenshot to File (to $XDG_PICTURE_DIR / $HOME)
 Right Mouse Button Drag|Draw
 .TE
 .SH INSTALLATION
-roomer is available on the AUR: https://aur.archlinux.org/packages/roomer-git/
 .PP
-You can install it using your AUR helper of choice, for example:
-.PP
-.nf
-yay -S roomer-git
-.fi
-.PP
-Alternatively, you can build it from source:
+Build from source:
 .PP
 .nf
-git clone https://github.com/lsck0/roomer.git
-cd roomer
+git clone https://github.com/rithikrathan/roomer-wayland.git
+cd roomer-wayland
 make build
 .fi
 .SH DEPENDENCIES
@@ -91,7 +84,5 @@ make
 .fi
 .SH REFERENCES
 https://github.com/tsoding/boomer
-.SH UPSTREAM
-https://github.com/lsck0/roomer
 .SH LICENSE
 MIT
