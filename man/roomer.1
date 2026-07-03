@@ -1,12 +1,12 @@
-.TH WAYLAND-BOOMER 1 "August 2025" "wayland-boomer" "User Commands"
+.TH ROOMER 1 "August 2025" "roomer" "User Commands"
 .SH NAME
-wayland-boomer \- zoomer application for linux
+roomer \- zoomer application for linux
 .SH SYNOPSIS
 Usage:
 .PP
 .nf
-  grim - | ./wayland-boomer [options]                        Boomer Mode
-  ./wayland-boomer [options] < image.[png|jpg|webp|bmp]      Image Viewer Mode
+  grim - | ./roomer [options]                        Boomer Mode
+  ./roomer [options] < image.[png|jpg|webp|bmp]      Image Viewer Mode
 .fi
 .SH OPTIONS
 .TP
@@ -31,14 +31,14 @@ Because this is a native wayland window, positioning has to be done through the 
 In the case of Hyprland, this can be done with the following rules:
 .PP
 .nf
-windowrule = float,     title:^wayland-boomer$
-windowrule = monitor 1, title:^wayland-boomer$
-windowrule = move 0 0,  title:^wayland-boomer$
-windowrule = noanim,    title:^wayland-boomer$
+windowrule = float,     title:^roomer$
+windowrule = monitor 1, title:^roomer$
+windowrule = move 0 0,  title:^roomer$
+windowrule = noanim,    title:^roomer$
 .fi
 .PP
 You need to set monitor to your leftmost monitor, hyprctl monitors shows all monitors and their IDs.
-When opening a file, the window title will be "wayland-boomer - image viewer".
+When opening a file, the window title will be "roomer - image viewer".
 .PP
 In case you are using monitor scaling, pass the same value to the --monitor-scaling option:
 .PP
@@ -62,19 +62,19 @@ CTRL + s|Take a Screenshot to File (to $XDG_PICTURE_DIR / $HOME)
 Right Mouse Button Drag|Draw
 .TE
 .SH INSTALLATION
-wayland-boomer is available on the AUR: https://aur.archlinux.org/packages/wayland-boomer-git/
+roomer is available on the AUR: https://aur.archlinux.org/packages/roomer-git/
 .PP
 You can install it using your AUR helper of choice, for example:
 .PP
 .nf
-yay -S wayland-boomer-git
+yay -S roomer-git
 .fi
 .PP
 Alternatively, you can build it from source:
 .PP
 .nf
-git clone https://github.com/lsck0/wayland-boomer.git
-cd wayland-boomer
+git clone https://github.com/lsck0/roomer.git
+cd roomer
 make build
 .fi
 .SH DEPENDENCIES
@@ -92,6 +92,6 @@ make
 .SH REFERENCES
 https://github.com/tsoding/boomer
 .SH UPSTREAM
-https://github.com/lsck0/wayland-boomer
+https://github.com/lsck0/roomer
 .SH LICENSE
 MIT

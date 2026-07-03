@@ -1,4 +1,4 @@
-#include "boomer.h"
+#include "roomer.h"
 
 // from stb_image_write.h, which is part of raylib
 extern unsigned char* stbi_write_png_to_mem(const unsigned char* pixels, int stride_bytes, int x, int y, int n, int* out_len);
@@ -22,7 +22,7 @@ void handle_inputs(void) {
 
 static void handle_reset(void) {
   if (IsKeyPressed(KEY_ZERO)) {
-    *g_state = g_initial_state;
+    *g_state            = g_initial_state;
     s_flashlight_manual = false;
     lines_clear();
   }
@@ -30,7 +30,7 @@ static void handle_reset(void) {
 
 static void handle_panning(void) {
   if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !g_state->is_drawing) {
-    Vector2 mouse_delta   = GetMouseDelta();
+    Vector2 mouse_delta    = GetMouseDelta();
     g_state->target_pan.x += mouse_delta.x;
     g_state->target_pan.y += mouse_delta.y;
   }
@@ -39,13 +39,17 @@ static void handle_panning(void) {
 static void handle_zoom(void) {
   float mouse_wheel_delta = GetMouseWheelMove();
   if (mouse_wheel_delta != 0 && !g_state->is_drawing && !IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_RIGHT_CONTROL)) {
-    Vector2 mouse_pos      = GetMousePosition();
-    float   prev_zoom      = g_state->zoom;
-    Vector2 world          = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
-    float zoom_multiplier = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
-    g_state->target_zoom   = Clamp(g_state->target_zoom + mouse_wheel_delta * g_configuration->zoom_step * zoom_multiplier, g_configuration->zoom_min, g_configuration->zoom_max);
-    g_state->target_pan.x  = mouse_pos.x - world.x * g_state->target_zoom;
-    g_state->target_pan.y  = mouse_pos.y - world.y * g_state->target_zoom;
+    Vector2 mouse_pos       = GetMousePosition();
+    float   prev_zoom       = g_state->zoom;
+    Vector2 world           = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
+    float   zoom_multiplier = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
+    g_state->target_zoom    = Clamp(
+        g_state->target_zoom + mouse_wheel_delta * g_configuration->zoom_step * zoom_multiplier,
+        g_configuration->zoom_min,
+        g_configuration->zoom_max
+    );
+    g_state->target_pan.x = mouse_pos.x - world.x * g_state->target_zoom;
+    g_state->target_pan.y = mouse_pos.y - world.y * g_state->target_zoom;
   }
 }
 
@@ -59,7 +63,8 @@ static void handle_flashlight(void) {
   float mouse_wheel_delta = GetMouseWheelMove();
   if (g_state->flashlight_enabled && mouse_wheel_delta != 0 && ctrl_down) {
     g_state->target_flashlight_radius -= mouse_wheel_delta * g_configuration->flashlight_radius_step;
-    g_state->target_flashlight_radius  = Clamp(g_state->target_flashlight_radius, g_configuration->flashlight_radius_min, g_configuration->flashlight_radius_max);
+    g_state->target_flashlight_radius =
+        Clamp(g_state->target_flashlight_radius, g_configuration->flashlight_radius_min, g_configuration->flashlight_radius_max);
   }
 }
 
@@ -117,7 +122,7 @@ void handle_screenshot(void) {
       SetRandomSeed(time(NULL));
       int  nonce = GetRandomValue(1000000, 99999999);
       char file_name[1024];
-      (void)sprintf(file_name, "%s/wayboomer_screenshot_%d.png", folder, nonce);
+      (void)sprintf(file_name, "%s/wayroomer_screenshot_%d.png", folder, nonce);
 
       bool result = SaveFileData(file_name, image_bytes_png, (int)fize_size);
       if (!result) {

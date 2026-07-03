@@ -1,8 +1,8 @@
-#include "boomer.h"
+#include "roomer.h"
 
 Configuration g_default_configuration = {
-  .window_title_boomermode = "wayland-boomer",
-  .window_title_imagemode  = "wayland-boomer - image viewer",
+  .window_title_roomermode = "roomer",
+  .window_title_imagemode  = "roomer - image viewer",
   .window_width            = 1080,
   .window_height           = 720,
   .monitor_scaling         = 1.0F,

@@ -1,4 +1,4 @@
-EXEC       = wayland-boomer
+EXEC       = roomer
 GIT_COMMIT = $(shell git rev-parse HEAD)
 
 .DEFAULT_GOAL := default
