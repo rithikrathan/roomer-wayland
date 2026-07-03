@@ -2,7 +2,6 @@
   <h1>Roomer</h1>
   <h3>zoomer application for linux</h3>
 </div>
-
 ## Demo
 
 ![Demo](https://raw.githubusercontent.com/rithikrathan/roomer-wayland/master/assets/demo.gif)

@@ -97,7 +97,7 @@ static void line_begin(void) {
 
   Line* new_line = &lines[lines_count++];
   *new_line      = (Line){
-         .thickness = g_configuration->draw_thickness / g_state->zoom,
+    .thickness = g_configuration->draw_thickness / g_state->zoom,
   };
 }
 
