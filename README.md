@@ -44,18 +44,23 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 
 ## Keybindings
 
-| Input                   | Action                                                  |
-| ----------------------- | ------------------------------------------------------- |
-| `ESC` or `q`            | Quit                                                    |
-| `0`                     | Reset                                                   |
-| Left Mouse Button Drag  | Pan                                                     |
-| Mouse Wheel             | Zoom In/Out                                             |
-| `SHIFT` + Mouse Wheel   | Zoom In/Out (3x slower, finer control)                  |
-| `f`                     | Toggle Flashlight                                       |
-| `CTRL` + Mouse Wheel    | Change Flashlight Radius                                |
-| `s`                     | Take a Screenshot to Clipboard (needs wl-copy)          |
-| `CTRL` + `s`            | Take a Screenshot to File (to $XDG_PICTURE_DIR / $HOME) |
-| Right Mouse Button Drag | Draw                                                    |
+| Input                  | Action                                                  |
+| ---------------------- | ------------------------------------------------------- |
+| `1`                    | Pen                                                     |
+| `2`                    | Eraser                                                  |
+| `3`                    | Highlighter                                             |
+| `B`                    | Toggle Blackboard                                       |
+| `C`                    | Toggle Toolbox                                          |
+| `F`                    | Toggle Flashlight                                       |
+| `H`                    | Toggle Keybindings help                                 |
+| `X`                    | Swap colors                                             |
+| `0`                    | Reset view                                              |
+| `ESC` / `Q`           | Quit                                                    |
+| Left Mouse Drag        | Pan                                                     |
+| Right Mouse Drag       | Draw                                                    |
+| Mouse Wheel            | Zoom In / Out                                           |
+| Shift + Mouse Wheel    | Fine zoom (3× slower)                                   |
+| Mouse Wheel (flashlight)| Change flashlight radius                               |
 
 ## Installation
 
@@ -78,6 +83,12 @@ make build
 ```sh
 make
 ```
+
+## Credits
+
+- Pen, Eraser, Trash, Maximize icons: [Feather Icons](https://feathericons.com/) (MIT)
+- Highlighter icon: [game-icons.net](https://game-icons.net/) (CC BY 3.0)
+- Font: [InconsolataLGCNerdFont](https://github.com/ryanoasis/nerd-fonts)
 
 ## References
 

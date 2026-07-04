@@ -35,6 +35,13 @@ State g_initial_state = {
   .flashlight_darkness       = 0.069F,
   .target_flashlight_radius  = 200.0F,
   .is_drawing                = false,
+  .toolbox_open              = false,
+  .keymaps_open              = false,
+  .current_tool              = TOOL_PEN,
+  .tool_pen_size             = 3.5F,
+  .tool_eraser_size          = 20.0F,
+  .color2                    = (Color){ 255, 255, 255, 255 },
+  .black_board_enabled       = false,
 };
 
 Configuration* g_configuration = NULL;
@@ -60,4 +67,6 @@ __attribute__((__destructor__)) void deinitialize_globals(void) {
   free(g_args);
   free(g_state);
   lines_clear();
+  bb_lines_clear();
+  hl_lines_clear();
 }

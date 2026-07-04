@@ -18,6 +18,14 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "tablet.h"
+
+typedef enum {
+  TOOL_PEN,
+  TOOL_ERASER,
+  TOOL_HIGHLIGHTER,
+} ToolType;
+
 typedef struct {
   Vector2 pan;
   Vector2 target_pan;
@@ -31,6 +39,15 @@ typedef struct {
   float   flashlight_darkness;
   float   target_flashlight_radius;
   bool    is_drawing;
+  bool    toolbox_open;
+  bool    keymaps_open;
+  ToolType current_tool;
+  float   tool_pen_size;
+  float   tool_eraser_size;
+  Color   color2;
+  bool    black_board_enabled;
+  int     image_w;
+  int     image_h;
 } State;
 
 typedef struct {
@@ -70,3 +87,24 @@ void handle_inputs(void);
 void handle_draw(void);
 void lines_draw(void);
 void lines_clear(void);
+void lines_erase_at(Vector2 screen_pos);
+void bb_lines_clear(void);
+void bb_lines_erase_at(Vector2 screen_pos);
+void bb_lines_draw(void);
+void hl_lines_clear(void);
+void hl_lines_erase_at(Vector2 screen_pos);
+bool hl_render_rt(void);
+void hl_composite(void);
+void hl_lines_draw(void);
+
+Color open_color_picker(Color current);
+
+void keymaps_render(void);
+
+#define HIGHLIGHTER_ALPHA 0.3f
+
+void toolbox_toggle(void);
+bool toolbox_is_open(void);
+bool toolbox_is_mouse_over(void);
+void toolbox_handle_input(void);
+void toolbox_render(void);
