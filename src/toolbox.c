@@ -6,15 +6,15 @@
 #include "fit_png.h"
 #include "font_ttf.h"
 
-#define BOX_W      210
-#define BOX_PAD    8
-#define ROW_H      38
-#define ROW_GAP    4
+#define BOX_W      220
+#define BOX_PAD    12
+#define ROW_H      42
+#define ROW_GAP    8
 #define BTN_W      88
 #define ICON_SZ    28
 #define FONT_SZ    26
 #define COLOR_SZ   44
-#define GAP_MD     8
+#define GAP_MD     10
 static Vector2 s_popup_pos = { 0 };
 
 // ── total popup height ──────────────────────────────────────
@@ -178,7 +178,6 @@ bool toolbox_is_mouse_over(void) {
 // ── slider / edit state ─────────────────────────────────────
 #define SLIDER_H   6
 #define THUMB_R    7
-#define SLIDER_MIN 1.0F
 
 static bool  s_dragging_slider = false;
 static bool  s_editing_size    = false;
@@ -188,17 +187,29 @@ static double s_edit_start     = 0;
 static bool  s_dragging_zoom   = false;
 
 static float zoom_to_slider(float z) {
-  if (z <= 1.0F) return (z - g_configuration->zoom_min) / (1.0F - g_configuration->zoom_min) - 1.0F;
-  return (z - 1.0F) / (g_configuration->zoom_max - 1.0F);
+  if (z <= 1.0F) {
+    float u = cbrtf((z - g_configuration->zoom_min) / (1.0F - g_configuration->zoom_min));
+    return u - 1.0F;
+  }
+  float u = cbrtf((z - 1.0F) / (g_configuration->zoom_max - 1.0F));
+  return u;
 }
 
 static float slider_to_zoom(float s) {
-  if (s <= 0) return g_configuration->zoom_min + (1.0F - g_configuration->zoom_min) * (s + 1.0F);
-  return 1.0F + (g_configuration->zoom_max - 1.0F) * s;
+  if (s <= 0) {
+    float u = s + 1.0F;
+    return g_configuration->zoom_min + u * u * u * (1.0F - g_configuration->zoom_min);
+  }
+  float u = s;
+  return 1.0F + u * u * u * (g_configuration->zoom_max - 1.0F);
+}
+
+static float slider_min(void) {
+  return (g_state->current_tool == TOOL_HIGHLIGHTER) ? 10.0F : 0.5F;
 }
 
 static float slider_max(void) {
-  return (g_state->current_tool == TOOL_ERASER) ? 60.0F : 30.0F;
+  return 45.0F;
 }
 
 static float current_size(void) {
@@ -206,14 +217,28 @@ static float current_size(void) {
 }
 
 static void set_size(float v) {
-  v = Clamp(v, SLIDER_MIN, slider_max());
+  v = Clamp(v, slider_min(), slider_max());
   if (g_state->current_tool == TOOL_ERASER) g_state->tool_eraser_size = v;
   else g_state->tool_pen_size = v;
+}
+
+static float s_size_mult = -1.0F;
+
+static float mult_to_size(float mult) {
+  return slider_min() + mult * (slider_max() - slider_min());
+}
+
+static float size_to_mult(float size) {
+  float range = slider_max() - slider_min();
+  if (range < 0.001f) return 0.0f;
+  return (size - slider_min()) / range;
 }
 
 void toolbox_handle_input(void) {
   if (!g_state->toolbox_open) return;
   load_assets();
+
+  if (s_size_mult < 0) s_size_mult = size_to_mult(current_size());
 
   Vector2 m = GetMousePosition();
   bool in_box = CheckCollisionPointRec(m, (Rectangle){ s_popup_pos.x, s_popup_pos.y, BOX_W, box_height() });
@@ -236,7 +261,7 @@ void toolbox_handle_input(void) {
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
       if (s_edit_len > 0) {
         float v = (float)atof(s_edit_buf);
-        if (v > 0) set_size(v);
+        if (v > 0) { set_size(v); s_size_mult = size_to_mult(v); }
       }
       s_editing_size = false;
     }
@@ -247,7 +272,7 @@ void toolbox_handle_input(void) {
       // commit on click outside
       if (s_edit_len > 0) {
         float v = (float)atof(s_edit_buf);
-        if (v > 0) set_size(v);
+        if (v > 0) { set_size(v); s_size_mult = size_to_mult(v); }
       }
       s_editing_size = false;
     }
@@ -258,17 +283,15 @@ void toolbox_handle_input(void) {
 
   // ── size slider drag ──────────────────────────────────────
   if (s_dragging_slider) {
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-      float lab_w = MeasureTextEx(tool_font, "Size", FONT_SZ, 1).x + 4;
-      float val_x = s_popup_pos.x + BOX_PAD + lab_w;
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || g_tablet.logical_pen_down) {
       char szbuf[16];
-      snprintf(szbuf, sizeof(szbuf), "%.1f", current_size());
+      snprintf(szbuf, sizeof(szbuf), "%.1f", mult_to_size(s_size_mult));
       float val_w = MeasureTextEx(tool_font, szbuf, FONT_SZ, 1).x + 8;
-      float sl_x  = val_x + val_w + 4;
-      float sl_w  = s_popup_pos.x + BOX_W - BOX_PAD - sl_x;
+      float sl_x  = s_popup_pos.x + BOX_PAD;
+      float sl_w  = BOX_W - BOX_PAD * 2 - val_w - 4;
       if (sl_w < 20) sl_w = 20;
-      float t = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
-      set_size(SLIDER_MIN + t * (slider_max() - SLIDER_MIN));
+      s_size_mult = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
+      set_size(mult_to_size(s_size_mult));
       return;
     }
     s_dragging_slider = false;
@@ -277,14 +300,15 @@ void toolbox_handle_input(void) {
 
   // ── zoom slider drag ──────────────────────────────────────
   if (s_dragging_zoom) {
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-      float lab_w = MeasureTextEx(tool_font, "Zoom", FONT_SZ, 1).x + 4;
-      float val_x = s_popup_pos.x + BOX_PAD + lab_w;
-      float val_w = 36;
-      float sl_x  = val_x + val_w + 4;
-      float sl_w  = s_popup_pos.x + BOX_W - BOX_PAD - sl_x;
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || g_tablet.logical_pen_down) {
+      char zbuf[16];
+      snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
+      float val_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
+      float sl_x  = s_popup_pos.x + BOX_PAD;
+      float sl_w  = BOX_W - BOX_PAD * 2 - val_w - 4;
       if (sl_w < 20) sl_w = 20;
-      float s = -1.0F + Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F) * 2.0F;
+      float t = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
+      float s = -1.0F + t * 2.0F;
       g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
       return;
     }
@@ -298,36 +322,35 @@ void toolbox_handle_input(void) {
   float xr = btn_x_right();
 
   // Row 0: [Pen] [Eraser]
-  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_PEN; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_ERASER; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_PEN; set_size(mult_to_size(s_size_mult)); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_ERASER; set_size(mult_to_size(s_size_mult)); return; }
 
   // Row 1: [Highlighter] [Colour Picker]
-  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(1), BTN_W, ROW_H })) { g_state->current_tool = TOOL_HIGHLIGHTER; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(1), BTN_W, ROW_H })) { g_state->current_tool = TOOL_HIGHLIGHTER; set_size(mult_to_size(s_size_mult)); return; }
   if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(1), BTN_W, ROW_H })) { g_state->current_tool = TOOL_COLOURPICKER; return; }
 
   // Row 2: Size label, editable value, slider
   float cy2 = row_y(2);
-  float lab_w = MeasureTextEx(tool_font, "Size", FONT_SZ, 1).x + 4;
-  float val_x = s_popup_pos.x + BOX_PAD + lab_w;
   char szbuf[16];
-  snprintf(szbuf, sizeof(szbuf), "%.1f", current_size());
+  snprintf(szbuf, sizeof(szbuf), "%.1f", mult_to_size(s_size_mult));
   float val_w = MeasureTextEx(tool_font, szbuf, FONT_SZ, 1).x + 8;
+  float val_x = s_popup_pos.x + BOX_W - BOX_PAD - val_w;
 
   // Click on value → start editing
   if (CheckCollisionPointRec(m, (Rectangle){ val_x, cy2, val_w, ROW_H })) {
     s_editing_size = true;
-    s_edit_len     = snprintf(s_edit_buf, sizeof(s_edit_buf), "%.1f", current_size());
+    s_edit_len     = snprintf(s_edit_buf, sizeof(s_edit_buf), "%.1f", mult_to_size(s_size_mult));
     s_edit_start   = GetTime();
     return;
   }
 
   // Click/drag on slider
-  float sl_x = val_x + val_w + 4;
-  float sl_w = s_popup_pos.x + BOX_W - BOX_PAD - sl_x;
+  float sl_x = s_popup_pos.x + BOX_PAD;
+  float sl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
   if (sl_w < 20) sl_w = 20;
   if (CheckCollisionPointRec(m, (Rectangle){ sl_x, cy2, sl_w, ROW_H })) {
-    float t = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
-    set_size(SLIDER_MIN + t * (slider_max() - SLIDER_MIN));
+    s_size_mult = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
+    set_size(mult_to_size(s_size_mult));
     s_dragging_slider = true;
     return;
   }
@@ -351,20 +374,17 @@ void toolbox_handle_input(void) {
   // Row 4: Zoom slider
   {
     float cy4 = row_y(4);
-    float lab_w = MeasureTextEx(tool_font, "Zoom", FONT_SZ, 1).x + 4;
-    float val_x = s_popup_pos.x + BOX_PAD + lab_w;
-    float val_w = 36;
     char zbuf[16];
     snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
-    float zv_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
-    if (val_w < zv_w) val_w = zv_w;
-    float sl_x = val_x + val_w + 4;
-    float sl_w = s_popup_pos.x + BOX_W - BOX_PAD - sl_x;
-    if (sl_w < 20) sl_w = 20;
+    float val_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
 
     // Click on slider
+    float sl_x = s_popup_pos.x + BOX_PAD;
+    float sl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
+    if (sl_w < 20) sl_w = 20;
     if (CheckCollisionPointRec(m, (Rectangle){ sl_x, cy4, sl_w, ROW_H })) {
-      float s = -1.0F + Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F) * 2.0F;
+      float t = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
+      float s = -1.0F + t * 2.0F;
       g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
       s_dragging_zoom = true;
       return;
@@ -418,47 +438,45 @@ void toolbox_render(void) {
   draw_tool_button(xr, row_y(1), "Pick", (Texture2D){ 0 }, cur == TOOL_COLOURPICKER, false);
   update_tooltip("Colour picker", (Rectangle){ xr, row_y(1), BTN_W, ROW_H });
 
-  // Row 2: Size label + editable value + slider
+  // Row 2: Size label + slider + editable value
   float cy2 = row_y(2);
-  float txt_y = cy2 + (ROW_H - FONT_SZ) / 2;
-  float cx = s_popup_pos.x + BOX_PAD;
-
-  txt(cx, txt_y, "Size", (Color){ 180, 180, 180, 255 });
-  float lab_w = MeasureTextEx(tool_font, "Size", FONT_SZ, 1).x + 4;
-  cx += lab_w;
-
-  float sz = current_size();
+  float sz   = mult_to_size(s_size_mult);
   char szbuf[16];
   snprintf(szbuf, sizeof(szbuf), "%.1f", sz);
   const char* val_str = s_editing_size ? s_edit_buf : szbuf;
   Color val_col = s_editing_size ? (Color){ 255, 255, 100, 255 } : WHITE;
-  txt(cx, txt_y, val_str, val_col);
   float val_w = MeasureTextEx(tool_font, val_str, FONT_SZ, 1).x + 8;
+  float val_x = s_popup_pos.x + BOX_W - BOX_PAD - val_w;
+  float val_y = cy2 + (ROW_H - FONT_SZ) / 2;
 
-  // Cursor blink when editing
-  if (s_editing_size && fmod(GetTime() - s_edit_start, 1.0) < 0.5) {
-    float cur_x = cx + MeasureTextEx(tool_font, val_str, FONT_SZ, 1).x;
-    DrawRectangle((int)cur_x, (int)(cy2 + 6), 2, (int)(ROW_H - 12), (Color){ 255, 255, 100, 255 });
-  }
-
-  cx += val_w + 4;
+  // Label at top
+  float lbl_y = cy2 + 2;
+  txt(s_popup_pos.x + BOX_PAD, lbl_y, "Size", (Color){ 180, 180, 180, 255 });
 
   // Slider track
-  float sl_w = s_popup_pos.x + BOX_W - BOX_PAD - cx;
+  float sl_x = s_popup_pos.x + BOX_PAD;
+  float sl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
   if (sl_w < 20) sl_w = 20;
-  float track_y = cy2 + (ROW_H - SLIDER_H) / 2;
-  DrawRectangle(cx, track_y, sl_w, SLIDER_H, (Color){ 60, 60, 60, 255 });
-  // Filled portion
-  float t = (sz - SLIDER_MIN) / (slider_max() - SLIDER_MIN);
-  if (t > 0)
-    DrawRectangle(cx, track_y, (int)(t * sl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
+  float track_y = cy2 + ROW_H - SLIDER_H - 4;
+  DrawRectangle(sl_x, track_y, sl_w, SLIDER_H, (Color){ 60, 60, 60, 255 });
+  if (s_size_mult > 0)
+    DrawRectangle(sl_x, track_y, (int)(s_size_mult * sl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
 
   // Thumb
-  float thumb_x = cx + t * sl_w;
+  float thumb_x = sl_x + s_size_mult * sl_w;
   DrawCircleV((Vector2){ thumb_x, track_y + SLIDER_H / 2.0F }, THUMB_R, (Color){ 200, 200, 200, 255 });
   DrawCircleV((Vector2){ thumb_x, track_y + SLIDER_H / 2.0F }, THUMB_R - 2, (Color){ 240, 240, 240, 255 });
 
-  update_tooltip("Drag to adjust size", (Rectangle){ cx, cy2, sl_w, ROW_H });
+  // Value text at right edge
+  txt(val_x, val_y, val_str, val_col);
+
+  // Cursor blink when editing
+  if (s_editing_size && fmod(GetTime() - s_edit_start, 1.0) < 0.5) {
+    float cur_x = val_x + MeasureTextEx(tool_font, val_str, FONT_SZ, 1).x;
+    DrawRectangle((int)cur_x, (int)(cy2 + 6), 2, (int)(ROW_H - 12), (Color){ 255, 255, 100, 255 });
+  }
+
+  update_tooltip("Drag to adjust size", (Rectangle){ sl_x, cy2, sl_w, ROW_H });
 
   // Row 3: Color cells
   float cy3 = row_y(3);
@@ -480,31 +498,37 @@ void toolbox_render(void) {
   // Row 4: Zoom slider
   {
     float cy4 = row_y(4);
-    float txt_y4 = cy4 + (ROW_H - FONT_SZ) / 2;
-    float zx = s_popup_pos.x + BOX_PAD;
-    txt(zx, txt_y4, "Zoom", (Color){ 180, 180, 180, 255 });
-    zx += MeasureTextEx(tool_font, "Zoom", FONT_SZ, 1).x + 4;
+
+    // Label at top
+    float lbl_y4 = cy4 + 2;
+    txt(s_popup_pos.x + BOX_PAD, lbl_y4, "Zoom", (Color){ 180, 180, 180, 255 });
 
     char zbuf[16];
     snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
-    float zv_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
-    txt(zx, txt_y4, zbuf, WHITE);
-    zx += zv_w + 4;
+    float val_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
+    float val_x = s_popup_pos.x + BOX_W - BOX_PAD - val_w;
+    float val_y4 = cy4 + (ROW_H - FONT_SZ) / 2;
 
-    float zsl_w = s_popup_pos.x + BOX_W - BOX_PAD - zx;
+    // Slider
+    float zsl_x = s_popup_pos.x + BOX_PAD;
+    float zsl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
     if (zsl_w < 20) zsl_w = 20;
-    float track_y4 = cy4 + (ROW_H - SLIDER_H) / 2;
-    DrawRectangle(zx, track_y4, zsl_w, SLIDER_H, (Color){ 60, 60, 60, 255 });
+    float track_y4 = cy4 + ROW_H - SLIDER_H - 4;
+    DrawRectangle(zsl_x, track_y4, zsl_w, SLIDER_H, (Color){ 60, 60, 60, 255 });
 
     float zt = (zoom_to_slider(g_state->zoom) + 1.0F) / 2.0F;
     zt = Clamp(zt, 0.0F, 1.0F);
     if (zt > 0)
-      DrawRectangle(zx, track_y4, (int)(zt * zsl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
+      DrawRectangle(zsl_x, track_y4, (int)(zt * zsl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
 
-    float zthumb_x = zx + zt * zsl_w;
+    float zthumb_x = zsl_x + zt * zsl_w;
     DrawCircleV((Vector2){ zthumb_x, track_y4 + SLIDER_H / 2.0F }, THUMB_R, (Color){ 200, 200, 200, 255 });
     DrawCircleV((Vector2){ zthumb_x, track_y4 + SLIDER_H / 2.0F }, THUMB_R - 2, (Color){ 240, 240, 240, 255 });
-    update_tooltip("Zoom (drag to adjust)", (Rectangle){ zx, cy4, zsl_w, ROW_H });
+
+    // Value text at right edge
+    txt(val_x, val_y4, zbuf, WHITE);
+
+    update_tooltip("Zoom (drag to adjust)", (Rectangle){ zsl_x, cy4, zsl_w, ROW_H });
   }
 
   // Row 5: [Clear] [Fit]

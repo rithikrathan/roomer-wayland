@@ -82,10 +82,10 @@ static void handle_zoom(void) {
 
 // ── zoom via tablet (anchor-distance) ──────────────────────
 
-static bool    s_tab_zoom_active  = false;
-static Vector2 s_tab_zoom_anchor  = { 0 };
+static bool    s_tab_zoom_active    = false;
 static float   s_tab_zoom_ref_zoom = 1.0F;
 static Vector2 s_tab_zoom_ref_pan  = { 0 };
+static float   s_tab_zoom_ref_dist = 0.0F;
 
 static void handle_tablet_zoom(void) {
   if (!g_tablet.present) return;
@@ -95,23 +95,25 @@ static void handle_tablet_zoom(void) {
 
   if (zoom_on) {
     if (!s_tab_zoom_active) {
-      s_tab_zoom_active   = true;
-      s_tab_zoom_anchor   = GetMousePosition();
-      s_tab_zoom_ref_zoom = g_state->zoom;
-      s_tab_zoom_ref_pan  = g_state->pan;
+      s_tab_zoom_active    = true;
+      s_tab_zoom_ref_zoom  = g_state->zoom;
+      s_tab_zoom_ref_pan   = g_state->pan;
+      Vector2 center = { GetScreenWidth() / 2.0F, GetScreenHeight() / 2.0F };
+      s_tab_zoom_ref_dist = Vector2Distance(GetMousePosition(), center);
+      if (s_tab_zoom_ref_dist < 1.0F) s_tab_zoom_ref_dist = 1.0F;
     } else {
-      Vector2 pos = GetMousePosition();
-      float dist = Vector2Distance(pos, s_tab_zoom_anchor);
+      Vector2 center = { GetScreenWidth() / 2.0F, GetScreenHeight() / 2.0F };
+      float dist = Vector2Distance(GetMousePosition(), center);
       g_state->target_zoom = Clamp(
-          s_tab_zoom_ref_zoom * (1.0F + dist * 0.005F),
+          s_tab_zoom_ref_zoom * (dist / s_tab_zoom_ref_dist),
           g_configuration->zoom_min, g_configuration->zoom_max
       );
-      Vector2 world_anchor = {
-          (s_tab_zoom_anchor.x - s_tab_zoom_ref_pan.x) / s_tab_zoom_ref_zoom,
-          (s_tab_zoom_anchor.y - s_tab_zoom_ref_pan.y) / s_tab_zoom_ref_zoom
+      Vector2 world_center = {
+          (center.x - s_tab_zoom_ref_pan.x) / s_tab_zoom_ref_zoom,
+          (center.y - s_tab_zoom_ref_pan.y) / s_tab_zoom_ref_zoom
       };
-      g_state->target_pan.x = s_tab_zoom_anchor.x - world_anchor.x * g_state->target_zoom;
-      g_state->target_pan.y = s_tab_zoom_anchor.y - world_anchor.y * g_state->target_zoom;
+      g_state->target_pan.x = center.x - world_center.x * g_state->target_zoom;
+      g_state->target_pan.y = center.y - world_center.y * g_state->target_zoom;
     }
   } else {
     s_tab_zoom_active = false;

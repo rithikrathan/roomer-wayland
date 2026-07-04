@@ -4,19 +4,21 @@
 static const char* flashlight_frag_shader_source =
   "#version 330 core\n"
   "in vec2 fragTexCoord;\n"
-  "out vec4 fragColor;\n"
+  "in vec4 fragColor;\n"
+  "out vec4 finalColor;\n"
   "uniform sampler2D texture0;\n"
   "uniform vec2 center;\n"
   "uniform float radius;\n"
   "uniform float darkness;\n"
   "void main(void)\n"
   "{\n"
-  "    vec4 color = texture(texture0, fragTexCoord);\n"
+  "    vec4 texel = texture(texture0, fragTexCoord);\n"
+  "    vec4 color = texel * fragColor;\n"
   "    vec2 delta = gl_FragCoord.xy - center;\n"
   "    if (dot(delta, delta) > radius * radius) {\n"
   "        color.rgb *= darkness;\n"
   "    }\n"
-  "    fragColor = color;\n"
+  "    finalColor = color;\n"
   "}\n";
 // clang-format on
 
@@ -130,7 +132,9 @@ int main(int argc, char** argv) {
       BeginShaderMode(flashlight_shader);
     }
 
-    ClearBackground(g_configuration->background_color);
+    Color bg = g_configuration->background_color;
+    bg.a = 255;
+    ClearBackground(bg);
     DrawTextureRec(
         img_render_texture.texture,
         (Rectangle){ 0, 0, (float)img_render_texture.texture.width, (float)-img_render_texture.texture.height },
@@ -155,9 +159,8 @@ int main(int argc, char** argv) {
     }
 
     // ── highlighter overlay ──────────────────────────────────
-    hl_lines_draw();
-
     if (g_state->flashlight_rendering) EndShaderMode();
+    hl_lines_draw();
 
     toolbox_render();
     EndDrawing();
