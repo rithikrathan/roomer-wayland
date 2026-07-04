@@ -395,9 +395,8 @@ void toolbox_handle_input(void) {
   // Row 5: [Clear] [Fit]
   float cy5 = row_y(5);
   if (CheckCollisionPointRec(m, (Rectangle){ xl, cy5, BTN_W, ROW_H })) {
-    hl_lines_clear();
-    if (g_state->black_board_enabled) bb_lines_clear();
-    else lines_clear();
+    if (g_state->black_board_enabled) { bb_lines_clear(); bb_hl_clear(); }
+    else { lines_clear(); hl_clear(); }
     return;
   }
   if (CheckCollisionPointRec(m, (Rectangle){ xr, cy5, BTN_W, ROW_H })) {
@@ -412,9 +411,14 @@ void toolbox_handle_input(void) {
   }
 }
 
+void toolbox_sync_size(void) {
+  s_size_mult = size_to_mult(current_size());
+}
+
 void toolbox_render(void) {
   if (!g_state->toolbox_open) return;
   load_assets();
+  s_size_mult = size_to_mult(current_size());
 
   float bx = s_popup_pos.x;
   float by = s_popup_pos.y;

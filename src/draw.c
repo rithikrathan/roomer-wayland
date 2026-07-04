@@ -35,6 +35,14 @@ static Vector2 to_texture_coords(Vector2 screen_pos);
 static Vector2 to_screen_coords(Vector2 texture_pos);
 static float   dist_to_segment(Vector2 p, Vector2 a, Vector2 b);
 
+static bool s_lines_dirty    = true;
+static bool s_bb_lines_dirty = true;
+
+bool is_lines_dirty(void)    { return s_lines_dirty; }
+bool is_bb_lines_dirty(void) { return s_bb_lines_dirty; }
+void clear_lines_dirty(void)    { s_lines_dirty = false; }
+void clear_bb_lines_dirty(void) { s_bb_lines_dirty = false; }
+
 static Vector2 pen_screen_pos(void) {
   if (g_tablet.abs_x_max == 0 || g_tablet.abs_y_max == 0)
     return GetMousePosition();
@@ -155,6 +163,7 @@ void lines_draw(void) {
 }
 
 void lines_clear(void) {
+  s_lines_dirty = true;
   for (int i = 0; i < lines_count; i++) free(lines[i].points);
   free(lines);
   lines          = NULL;
@@ -181,6 +190,7 @@ void lines_erase_at(Vector2 screen_pos) {
     continue;
 
   remove:
+    s_lines_dirty = true;
     free(line->points);
     memmove(&lines[i], &lines[i + 1], (lines_count - i - 1) * sizeof(Line));
     lines_count--;
@@ -188,7 +198,15 @@ void lines_erase_at(Vector2 screen_pos) {
   }
 }
 
+#define DECIMATE_DIST 1.0f
+
+static bool decimate(Vector2* points, int count, Vector2 new_pos) {
+  if (count == 0) return false;
+  return Vector2Distance(new_pos, points[count - 1]) < DECIMATE_DIST;
+}
+
 static void line_begin(void) {
+  s_lines_dirty = true;
   if (lines_count >= lines_capacity) {
     int   new_lines_capacity = (lines_capacity == 0) ? 4 : lines_capacity * 2;
     Line* new_lines          = realloc(lines, sizeof(Line) * new_lines_capacity);
@@ -212,6 +230,10 @@ static void line_begin(void) {
 static void line_add_point(Vector2 texture_pos) {
   Line* current_line = &lines[lines_count - 1];
 
+  if (decimate(current_line->points, current_line->points_count, texture_pos)) return;
+
+  s_lines_dirty = true;
+
   if (current_line->points_count >= current_line->points_capacity) {
     int      new_points_capacity = (current_line->points_capacity == 0) ? 64 : current_line->points_capacity * 2;
     Vector2* new_points          = realloc(current_line->points, sizeof(Vector2) * new_points_capacity);
@@ -225,6 +247,7 @@ static void line_add_point(Vector2 texture_pos) {
 }
 
 static void bb_line_begin(void) {
+  s_bb_lines_dirty = true;
   if (bb_lines_count >= bb_lines_capacity) {
     int   new_cap = (bb_lines_capacity == 0) ? 4 : bb_lines_capacity * 2;
     Line* new_buf = realloc(bb_lines, sizeof(Line) * new_cap);
@@ -245,6 +268,11 @@ static void bb_line_begin(void) {
 
 static void bb_line_add_point(Vector2 texture_pos) {
   Line* line = &bb_lines[bb_lines_count - 1];
+
+  if (decimate(line->points, line->points_count, texture_pos)) return;
+
+  s_bb_lines_dirty = true;
+
   if (line->points_count >= line->points_capacity) {
     int      new_cap = (line->points_capacity == 0) ? 64 : line->points_capacity * 2;
     Vector2* new_pts = realloc(line->points, sizeof(Vector2) * new_cap);
@@ -284,6 +312,9 @@ static void hl_line_add_point(Vector2 texture_pos) {
   Line* arr = g_state->black_board_enabled ? bb_hl_lines : hl_lines;
   int   idx = (g_state->black_board_enabled ? bb_hl_lines_count : hl_lines_count) - 1;
   Line* line = &arr[idx];
+
+  if (decimate(line->points, line->points_count, texture_pos)) return;
+
   if (line->points_count >= line->points_capacity) {
     int      new_cap = (line->points_capacity == 0) ? 64 : line->points_capacity * 2;
     Vector2* new_pts = realloc(line->points, sizeof(Vector2) * new_cap);
@@ -334,6 +365,7 @@ void bb_lines_draw(void) {
 }
 
 void bb_lines_clear(void) {
+  s_bb_lines_dirty = true;
   for (int i = 0; i < bb_lines_count; i++) free(bb_lines[i].points);
   free(bb_lines);
   bb_lines          = NULL;
@@ -356,6 +388,7 @@ void bb_lines_erase_at(Vector2 screen_pos) {
     }
     continue;
   remove:
+    s_bb_lines_dirty = true;
     free(line->points);
     memmove(&bb_lines[i], &bb_lines[i + 1], (bb_lines_count - i - 1) * sizeof(Line));
     bb_lines_count--;
@@ -446,12 +479,21 @@ void hl_lines_draw(void) {
   if (hl_render_rt()) hl_composite();
 }
 
-void hl_lines_clear(void) {
+void hl_clear(void) {
   for (int i = 0; i < hl_lines_count; i++) free(hl_lines[i].points);
   free(hl_lines);
   hl_lines          = NULL;
   hl_lines_count    = 0;
   hl_lines_capacity = 0;
+  if (s_hl_rt.id != 0) {
+    UnloadRenderTexture(s_hl_rt);
+    s_hl_rt = (RenderTexture2D){ 0 };
+    s_hl_rt_w = 0;
+    s_hl_rt_h = 0;
+  }
+}
+
+void bb_hl_clear(void) {
   for (int i = 0; i < bb_hl_lines_count; i++) free(bb_hl_lines[i].points);
   free(bb_hl_lines);
   bb_hl_lines          = NULL;
@@ -463,6 +505,11 @@ void hl_lines_clear(void) {
     s_hl_rt_w = 0;
     s_hl_rt_h = 0;
   }
+}
+
+void hl_lines_clear(void) {
+  hl_clear();
+  bb_hl_clear();
 }
 
 static int erase_one_array(Line** arr, int* cnt, Vector2 screen_pos) {

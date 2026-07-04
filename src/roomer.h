@@ -87,11 +87,17 @@ Image load_image_from_stdin(bool* out_was_file);
 void handle_inputs(void);
 void handle_draw(void);
 void lines_draw(void);
+bool is_lines_dirty(void);
+bool is_bb_lines_dirty(void);
+void clear_lines_dirty(void);
+void clear_bb_lines_dirty(void);
 void lines_clear(void);
 void lines_erase_at(Vector2 screen_pos);
 void bb_lines_clear(void);
 void bb_lines_erase_at(Vector2 screen_pos);
 void bb_lines_draw(void);
+void hl_clear(void);
+void bb_hl_clear(void);
 void hl_lines_clear(void);
 void hl_lines_erase_at(Vector2 screen_pos);
 bool hl_render_rt(void);
@@ -100,6 +106,7 @@ void hl_lines_draw(void);
 
 Color open_color_picker(Color current);
 
+void draw_size_indicator(void);
 void keymaps_render(void);
 
 #define HIGHLIGHTER_ALPHA 0.3f
@@ -109,3 +116,4 @@ bool toolbox_is_open(void);
 bool toolbox_is_mouse_over(void);
 void toolbox_handle_input(void);
 void toolbox_render(void);
+void toolbox_sync_size(void);

@@ -1,6 +1,7 @@
 #include "roomer.h"
 
-static bool s_flashlight_manual = false;
+static bool  s_flashlight_manual   = false;
+static double s_size_indicator_until = 0;
 
 static void handle_reset(void);
 static void handle_fit(void);
@@ -80,13 +81,21 @@ static void handle_panning(void) {
 
 static void handle_zoom(void) {
   float wheel = GetMouseWheelMove();
-  if (wheel != 0 && !g_state->is_drawing && !g_state->flashlight_enabled) {
+  bool  ctrl  = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+  float keyboard_delta = 0;
+  if (ctrl && IsKeyPressed(KEY_EQUAL))       keyboard_delta = 3.0F;
+  if (ctrl && IsKeyPressed(KEY_MINUS))       keyboard_delta = -3.0F;
+  if (ctrl && IsKeyPressed(KEY_KP_ADD))      keyboard_delta = 3.0F;
+  if (ctrl && IsKeyPressed(KEY_KP_SUBTRACT)) keyboard_delta = -3.0F;
+
+  float delta = (wheel != 0) ? wheel * g_configuration->zoom_step : keyboard_delta;
+  if (delta != 0 && !g_state->is_drawing && !g_state->flashlight_enabled) {
     Vector2 mouse_pos = GetMousePosition();
     float   prev_zoom = g_state->zoom;
     Vector2 world     = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
-    float   mult      = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
+    float   mult      = (wheel != 0 && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) ? 0.33F : 1.0F;
     g_state->target_zoom = Clamp(
-        g_state->target_zoom + wheel * g_configuration->zoom_step * mult,
+        g_state->target_zoom + delta * mult,
         g_configuration->zoom_min, g_configuration->zoom_max
     );
     g_state->target_pan.x = mouse_pos.x - world.x * g_state->target_zoom;
@@ -149,6 +158,46 @@ static void handle_flashlight(void) {
   }
 }
 
+static void handle_size_keys(void) {
+  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+  float step = 0.3F;
+  float* size = (g_state->current_tool == TOOL_ERASER) ? &g_state->tool_eraser_size : &g_state->tool_pen_size;
+
+  float s_min = (g_state->current_tool == TOOL_HIGHLIGHTER) ? 10.0F : 0.5F;
+  float s_max = (g_state->current_tool == TOOL_PEN) ? 10.0F : 45.0F;
+
+  static double s_last_repeat = 0;
+  bool plus  = !ctrl && (IsKeyDown(KEY_EQUAL) || IsKeyDown(KEY_KP_ADD));
+  bool minus = !ctrl && (IsKeyDown(KEY_MINUS) || IsKeyDown(KEY_KP_SUBTRACT));
+  if (!plus && !minus) { s_last_repeat = 0; return; }
+
+  double now = GetTime();
+  double delay = (s_last_repeat == 0) ? 0.0 : 0.06;
+  if (now - s_last_repeat < delay) return;
+  s_last_repeat = now;
+
+  if (plus) *size = fminf(*size + step, s_max);
+  if (minus) *size = fmaxf(*size - step, s_min);
+  toolbox_sync_size();
+  s_size_indicator_until = now + 1.5;
+}
+
+void draw_size_indicator(void) {
+  if (GetTime() > s_size_indicator_until) return;
+  float sz = (g_state->current_tool == TOOL_ERASER) ? g_state->tool_eraser_size : g_state->tool_pen_size;
+  Vector2 m = GetMousePosition();
+  Color c = g_configuration->draw_color;
+  c.a = 80;
+  DrawCircleV(m, sz, c);
+  c.a = 200;
+  DrawCircleV(m, sz, (Color){ 255, 255, 255, 60 });
+  DrawCircleLinesV(m, sz, (Color){ 255, 255, 255, 180 });
+  // crosshair
+  float ch = 6;
+  DrawLineV((Vector2){ m.x - ch, m.y }, (Vector2){ m.x + ch, m.y }, (Color){ 255, 255, 255, 180 });
+  DrawLineV((Vector2){ m.x, m.y - ch }, (Vector2){ m.x, m.y + ch }, (Color){ 255, 255, 255, 180 });
+}
+
 static void handle_toolbox(void) {
   if (IsKeyPressed(KEY_C)) { g_state->keymaps_open = false; toolbox_toggle(); }
   if (IsKeyPressed(KEY_X)) {
@@ -160,4 +209,5 @@ static void handle_toolbox(void) {
   if (IsKeyPressed(KEY_TWO))   g_state->current_tool = TOOL_ERASER;
   if (IsKeyPressed(KEY_THREE)) g_state->current_tool = TOOL_HIGHLIGHTER;
   if (IsKeyPressed(KEY_B))     g_state->black_board_enabled = !g_state->black_board_enabled;
+  handle_size_keys();
 }

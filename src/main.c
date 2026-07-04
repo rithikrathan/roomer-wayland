@@ -111,11 +111,25 @@ int main(int argc, char** argv) {
       g_state->flashlight_prev_enabled = g_state->flashlight_enabled;
     }
 
-    BeginTextureMode(img_render_texture);
-    ClearBackground(g_configuration->background_color);
-    DrawTextureEx(img_texture, g_state->pan, 0.0F, g_state->zoom, WHITE);
-    lines_draw();
-    EndTextureMode();
+    {
+      static float    s_last_zoom = 0;
+      static Vector2  s_last_pan  = { 0 };
+      bool zoom_changed = g_state->zoom != s_last_zoom ||
+                          g_state->pan.x != s_last_pan.x ||
+                          g_state->pan.y != s_last_pan.y;
+
+      if (zoom_changed || is_lines_dirty() || is_bb_lines_dirty()) {
+        BeginTextureMode(img_render_texture);
+        ClearBackground(g_configuration->background_color);
+        DrawTextureEx(img_texture, g_state->pan, 0.0F, g_state->zoom, WHITE);
+        lines_draw();
+        EndTextureMode();
+        s_last_zoom = g_state->zoom;
+        s_last_pan  = g_state->pan;
+        clear_lines_dirty();
+        clear_bb_lines_dirty();
+      }
+    }
 
     BeginDrawing();
     hl_render_rt();
@@ -180,6 +194,7 @@ int main(int argc, char** argv) {
 
     toolbox_render();
     keymaps_render();
+    draw_size_indicator();
     EndDrawing();
   }
 
