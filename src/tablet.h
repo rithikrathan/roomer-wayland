@@ -11,6 +11,12 @@ typedef struct {
   bool  button3;
   bool  pen_just_pressed;
   bool  active;
+  int   abs_x;
+  int   abs_y;
+  int   abs_x_max;
+  int   abs_y_max;
+  int   distance;
+  bool  logical_pen_down;
 } TabletState;
 
 extern TabletState g_tablet;

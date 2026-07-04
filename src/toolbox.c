@@ -5,12 +5,12 @@
 #include "fit_png.h"
 #include "font_ttf.h"
 
-#define BAR_H       64
+#define BOX_H       64
+#define BOX_PAD     8
 #define BTN_H       48
 #define FONT_SZ     32
 #define SWATCH_SZ   36
 #define ICON_SZ     36
-#define MARGIN      18
 #define GAP_SM      8
 #define GAP_MD      14
 
@@ -39,17 +39,32 @@ static Color color_presets[8] = {
 #define CLEAR_FIT_GAP 8
 #define FIT_W       56
 
+// ── popup position ─────────────────────────────────────────
+
+static Vector2 s_popup_pos = { 0 };
+
 // ── helpers ─────────────────────────────────────────────────
 
-static float btn_y(void) { return (BAR_H - BTN_H) / 2; }
+static float btn_y(void) { return s_popup_pos.y + BOX_PAD; }
 
-static float text_center_y(void) { return btn_y() + (BTN_H - FONT_SZ) / 2; }
-
-static Rectangle bar_rect(void) {
-  return (Rectangle){ 0, 0, GetScreenWidth(), BAR_H };
-}
+static float txt_y(void) { return btn_y() + (BTN_H - FONT_SZ) / 2; }
 
 static float swatch_y(void) { return btn_y() + (BTN_H - SWATCH_SZ) / 2; }
+
+// ── total content width ────────────────────────────────────
+
+static float content_width(void) {
+  float w = (float)PEN_W + PEN_ERA_GAP + ERASER_W;
+  w += SEP_W;
+  w += SIZE_LABEL_W + SIZE_VAL_W + MP_LEAD;
+  w += MINUS_W + MINUS_PLUS_GAP + PLUS_W + GAP_MD;
+  for (int i = 0; i < 8; i++) w += (float)SWATCH_SZ + (i < 7 ? SWATCH_GAP : 0);
+  w += GAP_MD + SEP_W + GAP_MD;
+  w += CLEAR_W + CLEAR_FIT_GAP + FIT_W;
+  return w;
+}
+
+static float box_width(void) { return content_width() + BOX_PAD * 2; }
 
 // ── lazy-loaded assets ──────────────────────────────────────
 
@@ -109,21 +124,8 @@ static void draw_icon_or_text(float cx, float cy, float w, Texture2D tex, const 
     float iy = cy + (BTN_H - ICON_SZ) / 2;
     DrawTexture(tex, (int)ix, (int)iy, WHITE);
   } else {
-    txt(cx + 4, text_center_y(), fallback, WHITE);
+    txt(cx + 4, txt_y(), fallback, WHITE);
   }
-}
-
-// ── total content width (for centering) ────────────────────
-
-static float content_width(void) {
-  float w = (float)PEN_W + PEN_ERA_GAP + ERASER_W;
-  w += SEP_W;
-  w += SIZE_LABEL_W + SIZE_VAL_W + MP_LEAD;
-  w += MINUS_W + MINUS_PLUS_GAP + PLUS_W + GAP_MD;
-  for (int i = 0; i < 8; i++) w += (float)SWATCH_SZ + (i < 7 ? SWATCH_GAP : 0);
-  w += GAP_MD + SEP_W + GAP_MD;
-  w += CLEAR_W + CLEAR_FIT_GAP + FIT_W;
-  return w;
 }
 
 // ── tooltip state ──────────────────────────────────────────
@@ -163,7 +165,7 @@ static void draw_tooltip_if_hovering(void) {
   float tw = ms.x + 12;
   float th = ms.y + 6;
   float tx = s_tip.rect.x + (s_tip.rect.width - tw) / 2;
-  float ty = BAR_H + 4;
+  float ty = s_popup_pos.y + BOX_H + 4;
 
   DrawRectangle((int)tx, (int)ty, (int)tw, (int)th, (Color){ 30, 30, 30, 230 });
   DrawRectangleLines((int)tx, (int)ty, (int)tw, (int)th, (Color){ 120, 120, 120, 255 });
@@ -174,6 +176,19 @@ static void draw_tooltip_if_hovering(void) {
 
 void toolbox_toggle(void) {
   g_state->toolbox_open = !g_state->toolbox_open;
+  if (g_state->toolbox_open) {
+    Vector2 m = GetMousePosition();
+    float bw = box_width();
+    float bh = BOX_H;
+    s_popup_pos.x = m.x - bw / 2;
+    s_popup_pos.y = m.y - bh - 10;
+    float sw = (float)GetScreenWidth();
+    float sh = (float)GetScreenHeight();
+    if (s_popup_pos.x < 4) s_popup_pos.x = 4;
+    if (s_popup_pos.x + bw > sw - 4) s_popup_pos.x = sw - 4 - bw;
+    if (s_popup_pos.y < 4) s_popup_pos.y = m.y + 10;
+    if (s_popup_pos.y + bh > sh - 4) s_popup_pos.y = sh - 4 - bh;
+  }
 }
 
 bool toolbox_is_open(void) {
@@ -182,7 +197,7 @@ bool toolbox_is_open(void) {
 
 bool toolbox_is_mouse_over(void) {
   if (!g_state->toolbox_open) return false;
-  return CheckCollisionPointRec(GetMousePosition(), bar_rect());
+  return CheckCollisionPointRec(GetMousePosition(), (Rectangle){ s_popup_pos.x, s_popup_pos.y, box_width(), BOX_H });
 }
 
 void toolbox_handle_input(void) {
@@ -190,10 +205,9 @@ void toolbox_handle_input(void) {
   if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !g_tablet.pen_just_pressed) return;
 
   Vector2 m = GetMousePosition();
-  if (!CheckCollisionPointRec(m, bar_rect())) return;
+  if (!CheckCollisionPointRec(m, (Rectangle){ s_popup_pos.x, s_popup_pos.y, box_width(), BOX_H })) return;
 
-  float sw = (float)GetScreenWidth();
-  float cx = (sw - content_width()) / 2;
+  float cx = s_popup_pos.x + BOX_PAD;
   float by = btn_y();
 
   // Pen
@@ -257,28 +271,30 @@ void toolbox_render(void) {
   if (!g_state->toolbox_open) return;
   load_assets();
 
-  float sw = (float)GetScreenWidth();
+  float bx = s_popup_pos.x;
+  float by = s_popup_pos.y;
+  float bw = box_width();
+  float bh = BOX_H;
 
-  Rectangle bar = bar_rect();
-  DrawRectangle(bar.x, bar.y, bar.width, bar.height, (Color){ 20, 20, 20, 215 });
-  DrawLine(bar.x, bar.y + bar.height, bar.x + bar.width, bar.y + bar.height, (Color){ 60, 60, 60, 255 });
+  DrawRectangle(bx, by, bw, bh, (Color){ 20, 20, 20, 220 });
+  DrawRectangleLines(bx, by, bw, bh, (Color){ 60, 60, 60, 255 });
 
-  float cx = (sw - content_width()) / 2;
-  float by = btn_y();
-  float ty = text_center_y();
+  float cx = bx + BOX_PAD;
+  float bjy = btn_y();
+  float ty = txt_y();
   Color  active_bg = (Color){ 50, 115, 210, 255 };
   Color  inactive_bg = (Color){ 40, 40, 40, 220 };
 
   // ── Pen ─────────────────────────────────────────────────────
   bool pen = g_state->current_tool == TOOL_PEN;
-  draw_icon_or_text(cx, by, PEN_W, pen_tex, "Pen", pen ? active_bg : inactive_bg);
-  update_tooltip("Pen (right-click)", (Rectangle){ cx, by, PEN_W, BTN_H });
+  draw_icon_or_text(cx, bjy, PEN_W, pen_tex, "Pen", pen ? active_bg : inactive_bg);
+  update_tooltip("Pen (right-click)", (Rectangle){ cx, bjy, PEN_W, BTN_H });
   cx += PEN_W + PEN_ERA_GAP;
 
   // ── Eraser ───────────────────────────────────────────────────
   bool era = g_state->current_tool == TOOL_ERASER;
-  draw_icon_or_text(cx, by, ERASER_W, eras_tex, "Erase", era ? active_bg : inactive_bg);
-  update_tooltip("Eraser (right-click)", (Rectangle){ cx, by, ERASER_W, BTN_H });
+  draw_icon_or_text(cx, bjy, ERASER_W, eras_tex, "Erase", era ? active_bg : inactive_bg);
+  update_tooltip("Eraser (right-click)", (Rectangle){ cx, bjy, ERASER_W, BTN_H });
   cx += ERASER_W;
 
   // ── Separator ──────────────────────────────────────────────
@@ -297,15 +313,15 @@ void toolbox_render(void) {
   cx += SIZE_VAL_W + MP_LEAD;
 
   // ── Minus ──────────────────────────────────────────────────
-  DrawRectangle(cx, by, MINUS_W, BTN_H, inactive_bg);
+  DrawRectangle(cx, bjy, MINUS_W, BTN_H, inactive_bg);
   txt(cx + 12, ty, "-", WHITE);
-  update_tooltip("Decrease size", (Rectangle){ cx, by, MINUS_W, BTN_H });
+  update_tooltip("Decrease size", (Rectangle){ cx, bjy, MINUS_W, BTN_H });
   cx += MINUS_W + MINUS_PLUS_GAP;
 
   // ── Plus ───────────────────────────────────────────────────
-  DrawRectangle(cx, by, PLUS_W, BTN_H, inactive_bg);
+  DrawRectangle(cx, bjy, PLUS_W, BTN_H, inactive_bg);
   txt(cx + 12, ty, "+", WHITE);
-  update_tooltip("Increase size", (Rectangle){ cx, by, PLUS_W, BTN_H });
+  update_tooltip("Increase size", (Rectangle){ cx, bjy, PLUS_W, BTN_H });
   cx += PLUS_W + GAP_MD;
 
   // ── Color swatches ─────────────────────────────────────────
@@ -328,13 +344,13 @@ void toolbox_render(void) {
   cx += SEP_W + GAP_MD;
 
   // ── Clear All ─────────────────────────────────────────────
-  draw_icon_or_text(cx, by, CLEAR_W, trash_tex, "Clear", inactive_bg);
-  update_tooltip("Clear all strokes", (Rectangle){ cx, by, CLEAR_W, BTN_H });
+  draw_icon_or_text(cx, bjy, CLEAR_W, trash_tex, "Clear", inactive_bg);
+  update_tooltip("Clear all strokes", (Rectangle){ cx, bjy, CLEAR_W, BTN_H });
   cx += CLEAR_W + CLEAR_FIT_GAP;
 
   // ── Fit to screen ─────────────────────────────────────────
-  draw_icon_or_text(cx, by, FIT_W, fit_tex, "Fit", inactive_bg);
-  update_tooltip("Fit image to screen", (Rectangle){ cx, by, FIT_W, BTN_H });
+  draw_icon_or_text(cx, bjy, FIT_W, fit_tex, "Fit", inactive_bg);
+  update_tooltip("Fit image to screen", (Rectangle){ cx, bjy, FIT_W, BTN_H });
   cx += FIT_W;
 
   draw_tooltip_if_hovering();

@@ -18,18 +18,28 @@ static Vector2 to_texture_coords(Vector2 screen_pos);
 static Vector2 to_screen_coords(Vector2 texture_pos);
 static float   dist_to_segment(Vector2 p, Vector2 a, Vector2 b);
 
+static Vector2 pen_screen_pos(void) {
+  if (g_tablet.abs_x_max == 0 || g_tablet.abs_y_max == 0)
+    return GetMousePosition();
+  float sx = (float)g_tablet.abs_x / (float)g_tablet.abs_x_max * GetScreenWidth();
+  float sy = (float)g_tablet.abs_y / (float)g_tablet.abs_y_max * GetScreenHeight();
+  return (Vector2){ sx, sy };
+}
+
 void handle_draw(void) {
   bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   bool right_held = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
 
   if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
-  bool pen_down   = (g_tablet.touching || g_tablet.pressure > 0.01f)
+  bool pen_down   = g_tablet.logical_pen_down
                     && !g_tablet.button1 && !g_tablet.button2 && !g_tablet.button3 && !ctrl;
   bool should_draw = right_held || pen_down;
 
+  Vector2 pos = pen_down ? pen_screen_pos() : GetMousePosition();
+
   if (should_draw && !g_state->is_drawing) {
     if (g_state->current_tool == TOOL_ERASER) {
-      lines_erase_at(GetMousePosition());
+      lines_erase_at(pos);
     } else {
       line_begin();
       g_state->is_drawing = true;
@@ -41,7 +51,7 @@ void handle_draw(void) {
   }
 
   if (g_state->is_drawing) {
-    line_add_point(to_texture_coords(GetMousePosition()));
+    line_add_point(to_texture_coords(pos));
   }
 }
 
@@ -135,16 +145,11 @@ static void line_begin(void) {
     lines_capacity = new_lines_capacity;
   }
 
-  float base_size = (g_state->current_tool == TOOL_PEN) ? g_state->tool_pen_size : g_state->tool_eraser_size;
-
-  if (g_state->current_tool == TOOL_PEN && g_tablet.present) {
-    base_size *= (0.3F + 0.7F * g_tablet.pressure);
-    if (base_size < 1.0F) base_size = 1.0F;
-  }
+  float size = (g_state->current_tool == TOOL_PEN) ? g_state->tool_pen_size : g_state->tool_eraser_size;
 
   Line* new_line = &lines[lines_count++];
   *new_line      = (Line){
-    .thickness = base_size / g_state->zoom,
+    .thickness = size / g_state->zoom,
     .color     = g_configuration->draw_color,
   };
 }

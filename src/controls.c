@@ -213,5 +213,5 @@ static void handle_screenshot(void) {
 }
 
 static void handle_toolbox(void) {
-  if (IsKeyPressed(KEY_T)) toolbox_toggle();
+  if (IsKeyPressed(KEY_C)) toolbox_toggle();
 }
