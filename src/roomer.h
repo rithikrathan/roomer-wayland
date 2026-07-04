@@ -24,7 +24,6 @@ typedef enum {
   TOOL_PEN,
   TOOL_ERASER,
   TOOL_HIGHLIGHTER,
-  TOOL_COLOURPICKER,
 } ToolType;
 
 typedef struct {
@@ -41,6 +40,7 @@ typedef struct {
   float   target_flashlight_radius;
   bool    is_drawing;
   bool    toolbox_open;
+  bool    keymaps_open;
   ToolType current_tool;
   float   tool_pen_size;
   float   tool_eraser_size;
@@ -93,9 +93,13 @@ void bb_lines_erase_at(Vector2 screen_pos);
 void bb_lines_draw(void);
 void hl_lines_clear(void);
 void hl_lines_erase_at(Vector2 screen_pos);
+bool hl_render_rt(void);
+void hl_composite(void);
 void hl_lines_draw(void);
 
 Color open_color_picker(Color current);
+
+void keymaps_render(void);
 
 #define HIGHLIGHTER_ALPHA 0.3f
 

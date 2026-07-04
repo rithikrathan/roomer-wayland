@@ -118,6 +118,7 @@ int main(int argc, char** argv) {
     EndTextureMode();
 
     BeginDrawing();
+    hl_render_rt();
     if (g_state->flashlight_rendering) {
       Vector2 mouse_pos     = GetMousePosition();
       float   u_center[2]   = { mouse_pos.x, (float)GetScreenHeight() - mouse_pos.y };
@@ -150,17 +151,35 @@ int main(int argc, char** argv) {
 
       float spacing = 50.0F * g_state->zoom;
       if (spacing < 4.0F) spacing = 4.0F;
+
+      float dot_r = 1.5F;
+      if (g_state->zoom > 1.0F) dot_r = 1.5F + (g_state->zoom - 1.0F) * 0.2F;
       for (float sx = fmodf(g_state->pan.x, spacing) - spacing; sx < sw; sx += spacing) {
         for (float sy = fmodf(g_state->pan.y, spacing) - spacing; sy < sh; sy += spacing) {
-          DrawCircleV((Vector2){ sx, sy }, 1.5F, (Color){ 60, 60, 60, 255 });
+          DrawCircleV((Vector2){ sx, sy }, dot_r, (Color){ 60, 60, 60, 255 });
         }
       }
+
+      if (g_state->zoom > 4.0F) {
+        float half_sp = spacing * 0.5F;
+        float mini_r  = dot_r * 0.35F;
+        Color mini_c  = (Color){ 50, 50, 50, 200 };
+        for (float sx = fmodf(g_state->pan.x + half_sp, spacing) - spacing; sx < sw; sx += spacing) {
+          for (float sy = fmodf(g_state->pan.y + half_sp, spacing) - spacing; sy < sh; sy += spacing) {
+            DrawCircleV((Vector2){ sx, sy }, mini_r, mini_c);
+          }
+        }
+      }
+
       bb_lines_draw();
     }
+
+    hl_composite();
 
     if (g_state->flashlight_rendering) EndShaderMode();
 
     toolbox_render();
+    keymaps_render();
     EndDrawing();
   }
 

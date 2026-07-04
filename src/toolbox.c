@@ -209,6 +209,7 @@ static float slider_min(void) {
 }
 
 static float slider_max(void) {
+  if (g_state->current_tool == TOOL_PEN) return 10.0F;
   return 45.0F;
 }
 
@@ -322,12 +323,12 @@ void toolbox_handle_input(void) {
   float xr = btn_x_right();
 
   // Row 0: [Pen] [Eraser]
-  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_PEN; set_size(mult_to_size(s_size_mult)); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_PEN; if (g_state->tool_pen_size > 10.0F) g_state->tool_pen_size = 10.0F; set_size(mult_to_size(s_size_mult)); return; }
   if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_ERASER; set_size(mult_to_size(s_size_mult)); return; }
 
-  // Row 1: [Highlighter] [Colour Picker]
+  // Row 1: [Highlighter] [Black Board]
   if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(1), BTN_W, ROW_H })) { g_state->current_tool = TOOL_HIGHLIGHTER; set_size(mult_to_size(s_size_mult)); return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(1), BTN_W, ROW_H })) { g_state->current_tool = TOOL_COLOURPICKER; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(1), BTN_W, ROW_H })) { g_state->black_board_enabled = !g_state->black_board_enabled; return; }
 
   // Row 2: Size label, editable value, slider
   float cy2 = row_y(2);
@@ -432,11 +433,11 @@ void toolbox_render(void) {
   draw_tool_button(xr, row_y(0), "Eraser", eras_tex, cur == TOOL_ERASER, false);
   update_tooltip("Eraser (2)", (Rectangle){ xr, row_y(0), BTN_W, ROW_H });
 
-  // Row 1: [Highlighter] [Colour Picker]
+  // Row 1: [Highlighter] [Black Board]
   draw_tool_button(xl, row_y(1), "Highlight", hl_tex, cur == TOOL_HIGHLIGHTER, false);
   update_tooltip("Highlighter (3)", (Rectangle){ xl, row_y(1), BTN_W, ROW_H });
-  draw_tool_button(xr, row_y(1), "Pick", (Texture2D){ 0 }, cur == TOOL_COLOURPICKER, false);
-  update_tooltip("Colour picker", (Rectangle){ xr, row_y(1), BTN_W, ROW_H });
+  draw_tool_button(xr, row_y(1), "Board", (Texture2D){ 0 }, g_state->black_board_enabled, false);
+  update_tooltip("Black Board (B)", (Rectangle){ xr, row_y(1), BTN_W, ROW_H });
 
   // Row 2: Size label + slider + editable value
   float cy2 = row_y(2);
@@ -539,4 +540,50 @@ void toolbox_render(void) {
   update_tooltip("Fit image to screen", (Rectangle){ xr, cy5, BTN_W, ROW_H });
 
   draw_tooltip_if_hovering();
+}
+
+// ── keymaps popup ───────────────────────────────────────────
+
+void keymaps_render(void) {
+  if (!g_state->keymaps_open) return;
+
+  int sw = GetScreenWidth();
+  int sh = GetScreenHeight();
+
+  float pw = 440.0f;
+  float ph = 380.0f;
+  float px = (sw - pw) / 2.0f;
+  float py = (sh - ph) / 2.0f - 20.0f;
+
+  DrawRectangle((int)px, (int)py, (int)pw, (int)ph, (Color){ 20, 20, 20, 230 });
+  DrawRectangleLines((int)px, (int)py, (int)pw, (int)ph, (Color){ 60, 60, 60, 255 });
+
+  int fs = 20;
+  int ly = (int)py + 16;
+  int gap = 24;
+  int lx1 = (int)px + 28;
+  int lx2 = (int)px + 240;
+
+  DrawText("Keybindings", lx1, ly, 22, (Color){ 200, 200, 200, 255 });
+  ly += gap + 8;
+
+  DrawText("1   Pen",             lx1, ly, fs, WHITE);
+  DrawText("2   Eraser",          lx1, ly + gap, fs, WHITE);
+  DrawText("3   Highlighter",     lx1, ly + gap * 2, fs, WHITE);
+  DrawText("C   Toolbox",         lx1, ly + gap * 3, fs, WHITE);
+  DrawText("0   Reset view",      lx1, ly + gap * 4, fs, WHITE);
+
+  DrawText("B   Blackboard",      lx2, ly, fs, WHITE);
+  DrawText("F   Flashlight",      lx2, ly + gap, fs, WHITE);
+  DrawText("X   Swap color",      lx2, ly + gap * 2, fs, WHITE);
+  DrawText("H   Keymaps",         lx2, ly + gap * 3, fs, WHITE);
+  DrawText("A   Fit to screen",   lx2, ly + gap * 4, fs, WHITE);
+
+  ly += gap * 5 + 8;
+
+  DrawText("Mouse Wheel     Zoom",       lx1, ly, fs, WHITE);
+  DrawText("Shift+Wheel     Fine zoom",  lx1, ly + gap, fs, WHITE);
+  DrawText("Left drag       Pan",        lx1, ly + gap * 2, fs, WHITE);
+  DrawText("Right drag      Draw",       lx1, ly + gap * 3, fs, WHITE);
+  DrawText("Esc / Q         Quit",       lx1, ly + gap * 4, fs, WHITE);
 }

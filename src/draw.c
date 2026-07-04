@@ -28,7 +28,6 @@ static void    bb_line_begin(void);
 static void    bb_line_add_point(Vector2 texture_pos);
 static void    hl_line_begin(void);
 static void    hl_line_add_point(Vector2 texture_pos);
-static void    draw_hl_array(Line* arr, int count);
 
 static void    line_begin(void);
 static void    line_add_point(Vector2 texture_pos);
@@ -83,10 +82,6 @@ void handle_draw(void) {
   Vector2 pos = pen_down ? pen_screen_pos() : GetMousePosition();
 
   if (should_draw && !g_state->is_drawing) {
-    if (g_state->current_tool == TOOL_COLOURPICKER) {
-      g_configuration->draw_color = open_color_picker(g_configuration->draw_color);
-      return;
-    }
     if (g_state->current_tool == TOOL_ERASER) {
       hl_lines_erase_at(pos);
       if (g_state->black_board_enabled) bb_lines_erase_at(pos);
@@ -114,7 +109,6 @@ void handle_draw(void) {
 }
 
 void lines_draw(void) {
-  draw_hl_array(hl_lines, hl_lines_count);
   for (int i = 0; i < lines_count; i++) {
     Line* line = &lines[i];
 
@@ -277,9 +271,6 @@ static void hl_line_begin(void) {
   float size = g_state->tool_pen_size;
   Color color = g_configuration->draw_color;
   float ha = HIGHLIGHTER_ALPHA * (color.a / 255.0f);
-  color.r = (unsigned char)(color.r * ha);
-  color.g = (unsigned char)(color.g * ha);
-  color.b = (unsigned char)(color.b * ha);
   color.a = (unsigned char)(ha * 255.0f);
   Line* line = &(*arr)[*cnt];
   *line = (Line){
@@ -311,43 +302,7 @@ static Vector2 to_screen_coords(Vector2 texture_pos) {
   return Vector2Add(Vector2Scale(texture_pos, g_state->zoom), g_state->pan);
 }
 
-static void draw_hl_array(Line* arr, int count) {
-  if (count == 0) return;
-  BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
-  for (int i = 0; i < count; i++) {
-    Line* line = &arr[i];
-    int n = line->points_count;
-    if (n == 0) continue;
-    Color c = line->color;
-    float screen_radius    = line->thickness * g_state->zoom;
-    float screen_thickness = screen_radius * 2.0F;
-    if (n == 1) {
-      DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
-      continue;
-    }
-    if (n == 2) {
-      Vector2 p0 = to_screen_coords(line->points[0]);
-      Vector2 p1 = to_screen_coords(line->points[1]);
-      DrawLineEx(p0, p1, screen_thickness, c);
-      DrawCircleV(p1, screen_radius, c);
-      continue;
-    }
-    DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
-    for (int j = 0; j < n - 2; j++) {
-      Vector2 P0 = to_screen_coords(line->points[j + 0]);
-      Vector2 P1 = to_screen_coords(line->points[j + 1]);
-      Vector2 P2 = to_screen_coords(line->points[j + 2]);
-      Vector2 avg = Vector2Scale(Vector2Add(P0, P2), 0.5F);
-      Vector2 ctrl = Vector2Subtract(Vector2Scale(P1, 2.0F), avg);
-      DrawSplineSegmentBezierQuadratic(P0, ctrl, P2, screen_thickness, c);
-    }
-    DrawCircleV(to_screen_coords(line->points[n - 1]), screen_radius, c);
-  }
-  EndBlendMode();
-}
-
 void bb_lines_draw(void) {
-  draw_hl_array(bb_hl_lines, bb_hl_lines_count);
   for (int i = 0; i < bb_lines_count; i++) {
     Line* line = &bb_lines[i];
     int n = line->points_count;
@@ -408,8 +363,87 @@ void bb_lines_erase_at(Vector2 screen_pos) {
   }
 }
 
+static RenderTexture2D s_hl_rt   = { 0 };
+static int            s_hl_rt_w = 0;
+static int            s_hl_rt_h = 0;
+
+static void hl_draw_into_rt(Line* arr, int count) {
+  for (int i = 0; i < count; i++) {
+    Line* line = &arr[i];
+    int n = line->points_count;
+    if (n == 0) continue;
+    Color c = line->color;
+    c.a = 255;
+    float screen_radius    = line->thickness * g_state->zoom;
+    float screen_thickness = screen_radius * 2.0F;
+    if (n == 1) {
+      DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
+      continue;
+    }
+    if (n == 2) {
+      Vector2 p0 = to_screen_coords(line->points[0]);
+      Vector2 p1 = to_screen_coords(line->points[1]);
+      DrawLineEx(p0, p1, screen_thickness, c);
+      DrawCircleV(p1, screen_radius, c);
+      continue;
+    }
+    DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
+    for (int j = 0; j < n - 2; j++) {
+      Vector2 P0 = to_screen_coords(line->points[j + 0]);
+      Vector2 P1 = to_screen_coords(line->points[j + 1]);
+      Vector2 P2 = to_screen_coords(line->points[j + 2]);
+      Vector2 avg = Vector2Scale(Vector2Add(P0, P2), 0.5F);
+      Vector2 ctrl = Vector2Subtract(Vector2Scale(P1, 2.0F), avg);
+      DrawSplineSegmentBezierQuadratic(P0, ctrl, P2, screen_thickness, c);
+    }
+    DrawCircleV(to_screen_coords(line->points[n - 1]), screen_radius, c);
+  }
+}
+
+bool hl_render_rt(void) {
+  int sw = GetScreenWidth();
+  int sh = GetScreenHeight();
+
+  bool render_hl = hl_lines_count > 0 && !g_state->black_board_enabled;
+  bool render_bb = bb_hl_lines_count > 0 && g_state->black_board_enabled;
+  if (!render_hl && !render_bb) return false;
+
+  if (s_hl_rt.id == 0 || s_hl_rt_w != sw || s_hl_rt_h != sh) {
+    if (s_hl_rt.id != 0) UnloadRenderTexture(s_hl_rt);
+    s_hl_rt   = LoadRenderTexture(sw, sh);
+    s_hl_rt_w = sw;
+    s_hl_rt_h = sh;
+  }
+
+  BeginTextureMode(s_hl_rt);
+  ClearBackground((Color){ 0, 0, 0, 0 });
+  if (render_hl) hl_draw_into_rt(hl_lines, hl_lines_count);
+  if (render_bb) hl_draw_into_rt(bb_hl_lines, bb_hl_lines_count);
+  EndTextureMode();
+  return true;
+}
+
+void hl_composite(void) {
+  if (s_hl_rt.id == 0) return;
+  bool active = (hl_lines_count > 0 && !g_state->black_board_enabled) ||
+                (bb_hl_lines_count > 0 && g_state->black_board_enabled);
+  if (!active) return;
+  int sw = GetScreenWidth();
+  int sh = GetScreenHeight();
+  unsigned char ha_byte = (unsigned char)(255.0f * HIGHLIGHTER_ALPHA);
+  Color tint = { ha_byte, ha_byte, ha_byte, ha_byte };
+  BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
+  DrawTextureRec(
+    s_hl_rt.texture,
+    (Rectangle){ 0, 0, (float)sw, (float)-sh },
+    (Vector2){ 0, 0 },
+    tint
+  );
+  EndBlendMode();
+}
+
 void hl_lines_draw(void) {
-  draw_hl_array(hl_lines, hl_lines_count);
+  if (hl_render_rt()) hl_composite();
 }
 
 void hl_lines_clear(void) {
@@ -423,6 +457,12 @@ void hl_lines_clear(void) {
   bb_hl_lines          = NULL;
   bb_hl_lines_count    = 0;
   bb_hl_lines_capacity = 0;
+  if (s_hl_rt.id != 0) {
+    UnloadRenderTexture(s_hl_rt);
+    s_hl_rt = (RenderTexture2D){ 0 };
+    s_hl_rt_w = 0;
+    s_hl_rt_h = 0;
+  }
 }
 
 static int erase_one_array(Line** arr, int* cnt, Vector2 screen_pos) {

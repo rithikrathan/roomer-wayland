@@ -36,6 +36,7 @@ State g_initial_state = {
   .target_flashlight_radius  = 200.0F,
   .is_drawing                = false,
   .toolbox_open              = false,
+  .keymaps_open              = false,
   .current_tool              = TOOL_PEN,
   .tool_pen_size             = 3.5F,
   .tool_eraser_size          = 20.0F,

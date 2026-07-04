@@ -1,28 +1,32 @@
 #include "roomer.h"
 
-// from stb_image_write.h, which is part of raylib
-extern unsigned char* stbi_write_png_to_mem(const unsigned char* pixels, int stride_bytes, int x, int y, int n, int* out_len);
-
 static bool s_flashlight_manual = false;
 
 static void handle_reset(void);
+static void handle_fit(void);
 static void handle_panning(void);
 static void handle_zoom(void);
 static void handle_tablet_zoom(void);
 static void handle_flashlight(void);
-static void handle_screenshot(void);
 static void handle_toolbox(void);
 
 void handle_inputs(void) {
   tablet_poll();
   handle_toolbox();
   if (g_state->toolbox_open) toolbox_handle_input();
+
+  if (IsKeyPressed(KEY_H)) {
+    g_state->keymaps_open = !g_state->keymaps_open;
+    if (g_state->keymaps_open) g_state->toolbox_open = false;
+  }
+  if (g_state->keymaps_open && IsKeyPressed(KEY_ESCAPE)) g_state->keymaps_open = false;
+
   handle_reset();
+  handle_fit();
   handle_panning();
   handle_zoom();
   handle_tablet_zoom();
   handle_flashlight();
-  handle_screenshot();
   handle_draw();
 }
 
@@ -44,6 +48,16 @@ static void handle_reset(void) {
     g_state->tool_pen_size    = saved_pen_size;
     g_state->tool_eraser_size = saved_eraser_size;
     g_configuration->draw_color = saved_color;
+  }
+}
+
+static void handle_fit(void) {
+  if (IsKeyPressed(KEY_A) && g_state->image_w > 0 && g_state->image_h > 0) {
+    float fw = (float)GetScreenWidth();
+    float fh = (float)GetScreenHeight();
+    g_state->target_zoom = fminf(fw / (float)g_state->image_w, fh / (float)g_state->image_h);
+    g_state->target_pan.x = (fw - (float)g_state->image_w * g_state->target_zoom) / 2;
+    g_state->target_pan.y = (fh - (float)g_state->image_h * g_state->target_zoom) / 2;
   }
 }
 
@@ -135,101 +149,14 @@ static void handle_flashlight(void) {
   }
 }
 
-// this is essentially raylib's TakeScreenshot() and ExportImage() decomposed
-static void handle_screenshot(void) {
-  if (IsKeyDown(KEY_S)) {
-    bool should_save_to_file = false;
-    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) should_save_to_file = true;
-
-    int screen_width  = GetScreenWidth();
-    int screen_height = GetScreenHeight();
-
-    unsigned char* rlReadScreenPixels(int width, int height);
-    unsigned char* raw_image_data = rlReadScreenPixels(screen_width, screen_height);
-    Image          image          = { raw_image_data, screen_width, screen_height, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-    int            channels       = 4;
-
-    unsigned long  fize_size = 0;
-    unsigned char* image_bytes_png =
-        stbi_write_png_to_mem(raw_image_data, channels * screen_width, screen_width, screen_height, channels, (int*)&fize_size);
-
-    if (image_bytes_png == NULL) {
-      TraceLog(LOG_ERROR, "Failed to generate PNG image");
-      goto cleanup;
-    }
-
-    if (should_save_to_file) {
-      const char* folder;
-
-      if (g_args->screenshot_folder != NULL) {
-        folder = g_args->screenshot_folder;
-      } else {
-        folder = getenv("XDG_PICTURES_DIR");
-      }
-
-      if (folder == NULL) {
-        folder = getenv("HOME");
-
-        if (folder == NULL) {
-          TraceLog(LOG_ERROR, "Could not find XDG_PICTURES_DIR or HOME environment variable");
-          goto cleanup;
-        }
-
-        if (DirectoryExists(TextFormat("%s/Pictures", folder))) {
-          folder = TextFormat("%s/Pictures", folder);
-        } else if (DirectoryExists(TextFormat("%s/pictures", folder))) {
-          folder = TextFormat("%s/pictures", folder);
-        } else if (DirectoryExists(TextFormat("%s/Images", folder))) {
-          folder = TextFormat("%s/Images", folder);
-        } else if (DirectoryExists(TextFormat("%s/images", folder))) {
-          folder = TextFormat("%s/images", folder);
-        }
-      }
-
-      SetRandomSeed(time(NULL));
-      int  nonce = GetRandomValue(1000000, 99999999);
-      char file_name[1024];
-      (void)sprintf(file_name, "%s/wayroomer_screenshot_%d.png", folder, nonce);
-
-      bool result = SaveFileData(file_name, image_bytes_png, (int)fize_size);
-      if (!result) {
-        TraceLog(LOG_ERROR, "Failed to save screenshot to %s", file_name);
-        goto cleanup;
-      }
-
-    } else {
-      FILE* wl_copy_pipe = popen("wl-copy", "w");
-      if (!wl_copy_pipe) {
-        TraceLog(LOG_ERROR, "Failed to open pipe to wl-copy, is wl-copy installed?");
-        (void)pclose(wl_copy_pipe);
-        goto cleanup;
-      }
-
-      unsigned long bytes_written = fwrite(image_bytes_png, 1, fize_size, wl_copy_pipe);
-      if (bytes_written != fize_size) {
-        TraceLog(LOG_ERROR, "Failed to write screenshot to wl-copy");
-        (void)pclose(wl_copy_pipe);
-        goto cleanup;
-      }
-
-      (void)fflush(wl_copy_pipe);
-      (void)pclose(wl_copy_pipe);
-    }
-
-  cleanup:
-    RL_FREE(image_bytes_png);
-    UnloadImage(image);
-  }
-}
-
 static void handle_toolbox(void) {
-  if (IsKeyPressed(KEY_C)) toolbox_toggle();
+  if (IsKeyPressed(KEY_C)) { g_state->keymaps_open = false; toolbox_toggle(); }
   if (IsKeyPressed(KEY_X)) {
     Color tmp = g_configuration->draw_color;
     g_configuration->draw_color = g_state->color2;
     g_state->color2 = tmp;
   }
-  if (IsKeyPressed(KEY_ONE))   g_state->current_tool = TOOL_PEN;
+  if (IsKeyPressed(KEY_ONE))   { g_state->current_tool = TOOL_PEN; if (g_state->tool_pen_size > 10.0F) g_state->tool_pen_size = 10.0F; }
   if (IsKeyPressed(KEY_TWO))   g_state->current_tool = TOOL_ERASER;
   if (IsKeyPressed(KEY_THREE)) g_state->current_tool = TOOL_HIGHLIGHTER;
   if (IsKeyPressed(KEY_B))     g_state->black_board_enabled = !g_state->black_board_enabled;
