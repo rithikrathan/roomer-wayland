@@ -356,18 +356,25 @@ void toolbox_handle_input(void) {
     return;
   }
 
-  // Row 3: Color cells
+  // Row 3: Color cells + swap button
   float cy3 = row_y(3);
-  float cc_w = COLOR_SZ;
-  float cc_gap = GAP_MD;
-  float cc_total = cc_w * 2 + cc_gap;
+  float cc_w  = COLOR_SZ;
+  float sw_sz = 20;
+  float sw_gap = 6;
+  float cc_total = cc_w + sw_gap + sw_sz + sw_gap + cc_w;
   float cc_x = s_popup_pos.x + (BOX_W - cc_total) / 2;
+  float c2_x = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
 
   if (CheckCollisionPointRec(m, (Rectangle){ cc_x, cy3, cc_w, ROW_H })) {
     g_configuration->draw_color = open_color_picker(g_configuration->draw_color);
     return;
   }
-  if (CheckCollisionPointRec(m, (Rectangle){ cc_x + cc_w + cc_gap, cy3, cc_w, ROW_H })) {
+  float swap_x = cc_x + cc_w + sw_gap;
+  if (CheckCollisionPointRec(m, (Rectangle){ swap_x, cy3, sw_sz, ROW_H })) {
+    g_configuration->draw_color = g_state->color2;
+    return;
+  }
+  if (CheckCollisionPointRec(m, (Rectangle){ c2_x, cy3, cc_w, ROW_H })) {
     g_state->color2 = open_color_picker(g_state->color2);
     return;
   }
@@ -483,11 +490,12 @@ void toolbox_render(void) {
 
   update_tooltip("Drag to adjust size", (Rectangle){ sl_x, cy2, sl_w, ROW_H });
 
-  // Row 3: Color cells
+  // Row 3: Color cells + swap button
   float cy3 = row_y(3);
-  float cc_w = COLOR_SZ;
-  float cc_gap = GAP_MD;
-  float cc_total = cc_w * 2 + cc_gap;
+  float cc_w  = COLOR_SZ;
+  float sw_sz = 20;
+  float sw_gap = 6;
+  float cc_total = cc_w + sw_gap + sw_sz + sw_gap + cc_w;
   float cc_x = s_popup_pos.x + (BOX_W - cc_total) / 2;
   float cc_y_off = cy3 + (ROW_H - cc_w) / 2;
 
@@ -495,7 +503,24 @@ void toolbox_render(void) {
   DrawRectangleLines(cc_x, cc_y_off, cc_w, cc_w, WHITE);
   update_tooltip("Color 1 (active)", (Rectangle){ cc_x, cy3, cc_w, ROW_H });
 
-  float c2x = cc_x + cc_w + cc_gap;
+  float swap_x = cc_x + cc_w + sw_gap;
+  float swap_y = cy3 + (ROW_H - sw_sz) / 2;
+  Color sw_bg = CheckCollisionPointRec(GetMousePosition(), (Rectangle){ swap_x, cy3, sw_sz, ROW_H }) ? (Color){ 70, 70, 70, 255 } : (Color){ 40, 40, 40, 220 };
+  DrawRectangle((int)swap_x, (int)swap_y, (int)sw_sz, (int)sw_sz, sw_bg);
+  DrawRectangleLines((int)swap_x, (int)swap_y, (int)sw_sz, (int)sw_sz, (Color){ 80, 80, 80, 255 });
+  // swap arrows
+  float cx = swap_x + sw_sz / 2;
+  float cy = swap_y + sw_sz / 2;
+  Color ac = (Color){ 200, 200, 200, 255 };
+  DrawLineV((Vector2){ cx - 4, cy - 3 }, (Vector2){ cx + 4, cy - 3 }, ac);
+  DrawLineV((Vector2){ cx + 2, cy - 5 }, (Vector2){ cx + 4, cy - 3 }, ac);
+  DrawLineV((Vector2){ cx + 2, cy - 1 }, (Vector2){ cx + 4, cy - 3 }, ac);
+  DrawLineV((Vector2){ cx + 4, cy + 3 }, (Vector2){ cx - 4, cy + 3 }, ac);
+  DrawLineV((Vector2){ cx - 2, cy + 1 }, (Vector2){ cx - 4, cy + 3 }, ac);
+  DrawLineV((Vector2){ cx - 2, cy + 5 }, (Vector2){ cx - 4, cy + 3 }, ac);
+  update_tooltip("Use color 2", (Rectangle){ swap_x, cy3, sw_sz, ROW_H });
+
+  float c2x = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
   DrawRectangle(c2x, cc_y_off, cc_w, cc_w, g_state->color2);
   DrawRectangleLines(c2x, cc_y_off, cc_w, cc_w, (Color){ 80, 80, 80, 255 });
   update_tooltip("Color 2 (swap with X)", (Rectangle){ c2x, cy3, cc_w, ROW_H });

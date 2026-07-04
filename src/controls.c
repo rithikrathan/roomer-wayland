@@ -83,10 +83,10 @@ static void handle_zoom(void) {
   float wheel = GetMouseWheelMove();
   bool  ctrl  = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   float keyboard_delta = 0;
-  if (ctrl && IsKeyPressed(KEY_EQUAL))       keyboard_delta = 3.0F;
-  if (ctrl && IsKeyPressed(KEY_MINUS))       keyboard_delta = -3.0F;
-  if (ctrl && IsKeyPressed(KEY_KP_ADD))      keyboard_delta = 3.0F;
-  if (ctrl && IsKeyPressed(KEY_KP_SUBTRACT)) keyboard_delta = -3.0F;
+  if (ctrl && IsKeyPressed(KEY_EQUAL))       keyboard_delta = 0.5F;
+  if (ctrl && IsKeyPressed(KEY_MINUS))       keyboard_delta = -0.5F;
+  if (ctrl && IsKeyPressed(KEY_KP_ADD))      keyboard_delta = 0.5F;
+  if (ctrl && IsKeyPressed(KEY_KP_SUBTRACT)) keyboard_delta = -0.5F;
 
   float delta = (wheel != 0) ? wheel * g_configuration->zoom_step : keyboard_delta;
   if (delta != 0 && !g_state->is_drawing && !g_state->flashlight_enabled) {
@@ -169,7 +169,7 @@ static void handle_size_keys(void) {
   static double s_last_repeat = 0;
   bool plus  = !ctrl && (IsKeyDown(KEY_EQUAL) || IsKeyDown(KEY_KP_ADD));
   bool minus = !ctrl && (IsKeyDown(KEY_MINUS) || IsKeyDown(KEY_KP_SUBTRACT));
-  if (!plus && !minus) { s_last_repeat = 0; return; }
+  if (!plus && !minus) { s_last_repeat = 0; s_size_indicator_until = 0; return; }
 
   double now = GetTime();
   double delay = (s_last_repeat == 0) ? 0.0 : 0.06;
