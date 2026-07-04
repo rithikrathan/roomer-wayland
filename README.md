@@ -16,7 +16,6 @@ Usage:
 Options:
   -h,             --help                                     Show this message and exit.
   -v,             --version                                  Show version and exit.
-  -sd <path>,     --screenshot-dir <path>                    Folder to save screenshots in.
   -ms <float>,    --monitor-scaling <float>                  Compositor monitor scaling (default 1).
   -bg <rgba hex>, --background <rgba hex>                    Background color.
 ```
