@@ -44,7 +44,9 @@ typedef struct {
   ToolType current_tool;
   float   tool_pen_size;
   float   tool_eraser_size;
+  Color   color1;
   Color   color2;
+  int     active_swatch;
   bool    black_board_enabled;
   int     image_w;
   int     image_h;

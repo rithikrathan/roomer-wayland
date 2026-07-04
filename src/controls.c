@@ -37,7 +37,9 @@ static void handle_reset(void) {
     ToolType saved_tool        = g_state->current_tool;
     float    saved_pen_size    = g_state->tool_pen_size;
     float    saved_eraser_size = g_state->tool_eraser_size;
-    Color    saved_color       = g_configuration->draw_color;
+    Color    saved_color1      = g_state->color1;
+    Color    saved_color2      = g_state->color2;
+    int      saved_active      = g_state->active_swatch;
 
     *g_state            = g_initial_state;
     s_flashlight_manual = false;
@@ -48,7 +50,10 @@ static void handle_reset(void) {
     g_state->current_tool     = saved_tool;
     g_state->tool_pen_size    = saved_pen_size;
     g_state->tool_eraser_size = saved_eraser_size;
-    g_configuration->draw_color = saved_color;
+    g_state->color1           = saved_color1;
+    g_state->color2           = saved_color2;
+    g_state->active_swatch    = saved_active;
+    g_configuration->draw_color = saved_active ? saved_color2 : saved_color1;
   }
 }
 
@@ -201,9 +206,10 @@ void draw_size_indicator(void) {
 static void handle_toolbox(void) {
   if (IsKeyPressed(KEY_C)) { g_state->keymaps_open = false; toolbox_toggle(); }
   if (IsKeyPressed(KEY_X)) {
-    Color tmp = g_configuration->draw_color;
-    g_configuration->draw_color = g_state->color2;
+    Color tmp = g_state->color1;
+    g_state->color1 = g_state->color2;
     g_state->color2 = tmp;
+    g_configuration->draw_color = g_state->active_swatch ? g_state->color2 : g_state->color1;
   }
   if (IsKeyPressed(KEY_ONE))   { g_state->current_tool = TOOL_PEN; if (g_state->tool_pen_size > 10.0F) g_state->tool_pen_size = 10.0F; }
   if (IsKeyPressed(KEY_TWO))   g_state->current_tool = TOOL_ERASER;

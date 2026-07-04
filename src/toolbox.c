@@ -366,16 +366,21 @@ void toolbox_handle_input(void) {
   float c2_x = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
 
   if (CheckCollisionPointRec(m, (Rectangle){ cc_x, cy3, cc_w, ROW_H })) {
-    g_configuration->draw_color = open_color_picker(g_configuration->draw_color);
+    g_state->color1 = open_color_picker(g_state->color1);
+    g_state->active_swatch = 0;
+    g_configuration->draw_color = g_state->color1;
     return;
   }
   float swap_x = cc_x + cc_w + sw_gap;
   if (CheckCollisionPointRec(m, (Rectangle){ swap_x, cy3, sw_sz, ROW_H })) {
-    g_configuration->draw_color = g_state->color2;
+    g_state->active_swatch = !g_state->active_swatch;
+    g_configuration->draw_color = g_state->active_swatch ? g_state->color2 : g_state->color1;
     return;
   }
   if (CheckCollisionPointRec(m, (Rectangle){ c2_x, cy3, cc_w, ROW_H })) {
     g_state->color2 = open_color_picker(g_state->color2);
+    g_state->active_swatch = 1;
+    g_configuration->draw_color = g_state->color2;
     return;
   }
 
@@ -499,9 +504,17 @@ void toolbox_render(void) {
   float cc_x = s_popup_pos.x + (BOX_W - cc_total) / 2;
   float cc_y_off = cy3 + (ROW_H - cc_w) / 2;
 
-  DrawRectangle(cc_x, cc_y_off, cc_w, cc_w, g_configuration->draw_color);
-  DrawRectangleLines(cc_x, cc_y_off, cc_w, cc_w, WHITE);
-  update_tooltip("Color 1 (active)", (Rectangle){ cc_x, cy3, cc_w, ROW_H });
+  DrawRectangle(cc_x, cc_y_off, cc_w, cc_w, g_state->color1);
+  Color c1_border = g_state->active_swatch == 0 ? WHITE : (Color){ 80, 80, 80, 255 };
+  DrawRectangleLines(cc_x, cc_y_off, cc_w, cc_w, c1_border);
+  if (g_state->active_swatch == 0 && pen_tex.id > 0) {
+    Color neg = { (unsigned char)(255 - g_state->color1.r),
+                  (unsigned char)(255 - g_state->color1.g),
+                  (unsigned char)(255 - g_state->color1.b), 200 };
+    float ps = 18.0F;
+    DrawTextureEx(pen_tex, (Vector2){ cc_x + 2, cc_y_off + cc_w - ps - 2 }, 0, ps / ICON_SZ, neg);
+  }
+  update_tooltip(g_state->active_swatch == 0 ? "Color 1 (active)" : "Color 1", (Rectangle){ cc_x, cy3, cc_w, ROW_H });
 
   float swap_x = cc_x + cc_w + sw_gap;
   float swap_y = cy3 + (ROW_H - sw_sz) / 2;
@@ -522,8 +535,16 @@ void toolbox_render(void) {
 
   float c2x = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
   DrawRectangle(c2x, cc_y_off, cc_w, cc_w, g_state->color2);
-  DrawRectangleLines(c2x, cc_y_off, cc_w, cc_w, (Color){ 80, 80, 80, 255 });
-  update_tooltip("Color 2 (swap with X)", (Rectangle){ c2x, cy3, cc_w, ROW_H });
+  Color c2_border = g_state->active_swatch == 1 ? WHITE : (Color){ 80, 80, 80, 255 };
+  DrawRectangleLines(c2x, cc_y_off, cc_w, cc_w, c2_border);
+  if (g_state->active_swatch == 1 && pen_tex.id > 0) {
+    Color neg = { (unsigned char)(255 - g_state->color2.r),
+                  (unsigned char)(255 - g_state->color2.g),
+                  (unsigned char)(255 - g_state->color2.b), 200 };
+    float ps = 18.0F;
+    DrawTextureEx(pen_tex, (Vector2){ c2x + 2, cc_y_off + cc_w - ps - 2 }, 0, ps / ICON_SZ, neg);
+  }
+  update_tooltip(g_state->active_swatch == 1 ? "Color 2 (active)" : "Color 2", (Rectangle){ c2x, cy3, cc_w, ROW_H });
 
   // Row 4: Zoom slider
   {

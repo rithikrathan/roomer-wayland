@@ -13,7 +13,7 @@ Configuration g_default_configuration = {
   .flashlight_radius_min   = 20.0F,
   .flashlight_radius_max   = 600.0F,
   .flashlight_radius_step  = 20.0F,
-  .draw_color              = RED,
+  .draw_color              = (Color){ 224, 40, 64, 255 },
   .draw_thickness          = 3.5F,
   .transparent_background  = false,
 };
@@ -41,7 +41,9 @@ State g_initial_state = {
   .current_tool              = TOOL_PEN,
   .tool_pen_size             = 3.5F,
   .tool_eraser_size          = 20.0F,
+  .color1                    = (Color){ 224, 40, 64, 255 },
   .color2                    = (Color){ 255, 255, 255, 255 },
+  .active_swatch             = 0,
   .black_board_enabled       = false,
 };
 
