@@ -20,10 +20,15 @@ static Line* hl_lines          = NULL;
 static int   hl_lines_count    = 0;
 static int   hl_lines_capacity = 0;
 
+static Line* bb_hl_lines          = NULL;
+static int   bb_hl_lines_count    = 0;
+static int   bb_hl_lines_capacity = 0;
+
 static void    bb_line_begin(void);
 static void    bb_line_add_point(Vector2 texture_pos);
 static void    hl_line_begin(void);
 static void    hl_line_add_point(Vector2 texture_pos);
+static void    draw_hl_array(Line* arr, int count);
 
 static void    line_begin(void);
 static void    line_add_point(Vector2 texture_pos);
@@ -109,6 +114,7 @@ void handle_draw(void) {
 }
 
 void lines_draw(void) {
+  draw_hl_array(hl_lines, hl_lines_count);
   for (int i = 0; i < lines_count; i++) {
     Line* line = &lines[i];
 
@@ -256,25 +262,37 @@ static void bb_line_add_point(Vector2 texture_pos) {
 }
 
 static void hl_line_begin(void) {
-  if (hl_lines_count >= hl_lines_capacity) {
-    int   new_cap = (hl_lines_capacity == 0) ? 4 : hl_lines_capacity * 2;
-    Line* new_buf = realloc(hl_lines, sizeof(Line) * new_cap);
+  Line** arr     = g_state->black_board_enabled ? &bb_hl_lines : &hl_lines;
+  int*   cnt     = g_state->black_board_enabled ? &bb_hl_lines_count : &hl_lines_count;
+  int*   cap     = g_state->black_board_enabled ? &bb_hl_lines_capacity : &hl_lines_capacity;
+  int    cur_cnt = *cnt;
+  int    cur_cap = *cap;
+  if (cur_cnt >= cur_cap) {
+    int   new_cap = (cur_cap == 0) ? 4 : cur_cap * 2;
+    Line* new_buf = realloc(*arr, sizeof(Line) * new_cap);
     assert(new_buf);
-    hl_lines          = new_buf;
-    hl_lines_capacity = new_cap;
+    *arr          = new_buf;
+    *cap          = new_cap;
   }
   float size = g_state->tool_pen_size;
   Color color = g_configuration->draw_color;
-  color.a = (unsigned char)((float)color.a * HIGHLIGHTER_ALPHA);
-  Line* line = &hl_lines[hl_lines_count++];
+  float ha = HIGHLIGHTER_ALPHA * (color.a / 255.0f);
+  color.r = (unsigned char)(color.r * ha);
+  color.g = (unsigned char)(color.g * ha);
+  color.b = (unsigned char)(color.b * ha);
+  color.a = (unsigned char)(ha * 255.0f);
+  Line* line = &(*arr)[*cnt];
   *line = (Line){
     .thickness = size / g_state->zoom,
     .color     = color,
   };
+  (*cnt)++;
 }
 
 static void hl_line_add_point(Vector2 texture_pos) {
-  Line* line = &hl_lines[hl_lines_count - 1];
+  Line* arr = g_state->black_board_enabled ? bb_hl_lines : hl_lines;
+  int   idx = (g_state->black_board_enabled ? bb_hl_lines_count : hl_lines_count) - 1;
+  Line* line = &arr[idx];
   if (line->points_count >= line->points_capacity) {
     int      new_cap = (line->points_capacity == 0) ? 64 : line->points_capacity * 2;
     Vector2* new_pts = realloc(line->points, sizeof(Vector2) * new_cap);
@@ -293,7 +311,43 @@ static Vector2 to_screen_coords(Vector2 texture_pos) {
   return Vector2Add(Vector2Scale(texture_pos, g_state->zoom), g_state->pan);
 }
 
+static void draw_hl_array(Line* arr, int count) {
+  if (count == 0) return;
+  BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
+  for (int i = 0; i < count; i++) {
+    Line* line = &arr[i];
+    int n = line->points_count;
+    if (n == 0) continue;
+    Color c = line->color;
+    float screen_radius    = line->thickness * g_state->zoom;
+    float screen_thickness = screen_radius * 2.0F;
+    if (n == 1) {
+      DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
+      continue;
+    }
+    if (n == 2) {
+      Vector2 p0 = to_screen_coords(line->points[0]);
+      Vector2 p1 = to_screen_coords(line->points[1]);
+      DrawLineEx(p0, p1, screen_thickness, c);
+      DrawCircleV(p1, screen_radius, c);
+      continue;
+    }
+    DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
+    for (int j = 0; j < n - 2; j++) {
+      Vector2 P0 = to_screen_coords(line->points[j + 0]);
+      Vector2 P1 = to_screen_coords(line->points[j + 1]);
+      Vector2 P2 = to_screen_coords(line->points[j + 2]);
+      Vector2 avg = Vector2Scale(Vector2Add(P0, P2), 0.5F);
+      Vector2 ctrl = Vector2Subtract(Vector2Scale(P1, 2.0F), avg);
+      DrawSplineSegmentBezierQuadratic(P0, ctrl, P2, screen_thickness, c);
+    }
+    DrawCircleV(to_screen_coords(line->points[n - 1]), screen_radius, c);
+  }
+  EndBlendMode();
+}
+
 void bb_lines_draw(void) {
+  draw_hl_array(bb_hl_lines, bb_hl_lines_count);
   for (int i = 0; i < bb_lines_count; i++) {
     Line* line = &bb_lines[i];
     int n = line->points_count;
@@ -354,65 +408,8 @@ void bb_lines_erase_at(Vector2 screen_pos) {
   }
 }
 
-static RenderTexture2D s_hl_rt = { 0 };
-static int s_hl_rt_w = 0;
-static int s_hl_rt_h = 0;
-
 void hl_lines_draw(void) {
-  if (hl_lines_count == 0) return;
-  int sw = GetScreenWidth();
-  int sh = GetScreenHeight();
-
-  if (s_hl_rt.id == 0 || s_hl_rt_w != sw || s_hl_rt_h != sh) {
-    if (s_hl_rt.id != 0) UnloadRenderTexture(s_hl_rt);
-    s_hl_rt = LoadRenderTexture(sw, sh);
-    s_hl_rt_w = sw;
-    s_hl_rt_h = sh;
-  }
-
-  BeginTextureMode(s_hl_rt);
-  ClearBackground((Color){ 0, 0, 0, 0 });
-
-  for (int i = 0; i < hl_lines_count; i++) {
-    Line* line = &hl_lines[i];
-    int n = line->points_count;
-    if (n == 0) continue;
-    Color c = line->color;
-    c.a = 255;
-    float screen_radius    = line->thickness * g_state->zoom;
-    float screen_thickness = screen_radius * 2.0F;
-    if (n == 1) {
-      DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
-      continue;
-    }
-    if (n == 2) {
-      Vector2 p0 = to_screen_coords(line->points[0]);
-      Vector2 p1 = to_screen_coords(line->points[1]);
-      DrawLineEx(p0, p1, screen_thickness, c);
-      DrawCircleV(p1, screen_radius, c);
-      continue;
-    }
-    DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
-    for (int j = 0; j < n - 2; j++) {
-      Vector2 P0 = to_screen_coords(line->points[j + 0]);
-      Vector2 P1 = to_screen_coords(line->points[j + 1]);
-      Vector2 P2 = to_screen_coords(line->points[j + 2]);
-      Vector2 avg = Vector2Scale(Vector2Add(P0, P2), 0.5F);
-      Vector2 ctrl = Vector2Subtract(Vector2Scale(P1, 2.0F), avg);
-      DrawSplineSegmentBezierQuadratic(P0, ctrl, P2, screen_thickness, c);
-    }
-    DrawCircleV(to_screen_coords(line->points[n - 1]), screen_radius, c);
-  }
-
-  EndTextureMode();
-
-  Color tint = { 255, 255, 255, (unsigned char)(255.0F * HIGHLIGHTER_ALPHA) };
-  DrawTextureRec(
-    s_hl_rt.texture,
-    (Rectangle){ 0, 0, (float)sw, (float)-sh },
-    (Vector2){ 0, 0 },
-    tint
-  );
+  draw_hl_array(hl_lines, hl_lines_count);
 }
 
 void hl_lines_clear(void) {
@@ -421,17 +418,16 @@ void hl_lines_clear(void) {
   hl_lines          = NULL;
   hl_lines_count    = 0;
   hl_lines_capacity = 0;
-  if (s_hl_rt.id != 0) {
-    UnloadRenderTexture(s_hl_rt);
-    s_hl_rt = (RenderTexture2D){ 0 };
-    s_hl_rt_w = 0;
-    s_hl_rt_h = 0;
-  }
+  for (int i = 0; i < bb_hl_lines_count; i++) free(bb_hl_lines[i].points);
+  free(bb_hl_lines);
+  bb_hl_lines          = NULL;
+  bb_hl_lines_count    = 0;
+  bb_hl_lines_capacity = 0;
 }
 
-void hl_lines_erase_at(Vector2 screen_pos) {
-  for (int i = hl_lines_count - 1; i >= 0; i--) {
-    Line* line = &hl_lines[i];
+static int erase_one_array(Line** arr, int* cnt, Vector2 screen_pos) {
+  for (int i = *cnt - 1; i >= 0; i--) {
+    Line* line = &(*arr)[i];
     float threshold = line->thickness * g_state->zoom + 8.0F;
     if (line->points_count == 1) {
       if (Vector2Distance(screen_pos, to_screen_coords(line->points[0])) < threshold) goto remove;
@@ -445,10 +441,16 @@ void hl_lines_erase_at(Vector2 screen_pos) {
     continue;
   remove:
     free(line->points);
-    memmove(&hl_lines[i], &hl_lines[i + 1], (hl_lines_count - i - 1) * sizeof(Line));
-    hl_lines_count--;
-    return;
+    memmove(&(*arr)[i], &(*arr)[i + 1], (*cnt - i - 1) * sizeof(Line));
+    (*cnt)--;
+    return 1;
   }
+  return 0;
+}
+
+void hl_lines_erase_at(Vector2 screen_pos) {
+  if (erase_one_array(&hl_lines, &hl_lines_count, screen_pos)) return;
+  if (erase_one_array(&bb_hl_lines, &bb_hl_lines_count, screen_pos)) return;
 }
 
 static float dist_to_segment(Vector2 p, Vector2 a, Vector2 b) {

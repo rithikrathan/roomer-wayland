@@ -158,9 +158,7 @@ int main(int argc, char** argv) {
       bb_lines_draw();
     }
 
-    // ── highlighter overlay ──────────────────────────────────
     if (g_state->flashlight_rendering) EndShaderMode();
-    hl_lines_draw();
 
     toolbox_render();
     EndDrawing();
