@@ -20,7 +20,7 @@ static Vector2 s_popup_pos = { 0 };
 // ── total popup height ──────────────────────────────────────
 
 static float box_height(void) {
-  return BOX_PAD + 5 * ROW_H + 4 * ROW_GAP + BOX_PAD;
+  return BOX_PAD + 6 * ROW_H + 5 * ROW_GAP + BOX_PAD;
 }
 
 // ── row y offsets ───────────────────────────────────────────
@@ -185,6 +185,17 @@ static bool  s_editing_size    = false;
 static char  s_edit_buf[8]    = { 0 };
 static int   s_edit_len        = 0;
 static double s_edit_start     = 0;
+static bool  s_dragging_zoom   = false;
+
+static float zoom_to_slider(float z) {
+  if (z <= 1.0F) return (z - g_configuration->zoom_min) / (1.0F - g_configuration->zoom_min) - 1.0F;
+  return (z - 1.0F) / (g_configuration->zoom_max - 1.0F);
+}
+
+static float slider_to_zoom(float s) {
+  if (s <= 0) return g_configuration->zoom_min + (1.0F - g_configuration->zoom_min) * (s + 1.0F);
+  return 1.0F + (g_configuration->zoom_max - 1.0F) * s;
+}
 
 static float slider_max(void) {
   return (g_state->current_tool == TOOL_ERASER) ? 60.0F : 30.0F;
@@ -243,12 +254,11 @@ void toolbox_handle_input(void) {
     return;  // consume all input while editing
   }
 
-  if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !g_tablet.pen_just_pressed && !s_dragging_slider) return;
+  if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !g_tablet.pen_just_pressed && !s_dragging_slider && !s_dragging_zoom) return;
 
-  // ── slider drag ───────────────────────────────────────────
+  // ── size slider drag ──────────────────────────────────────
   if (s_dragging_slider) {
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-      // Compute slider geometry (mirroring render)
       float lab_w = MeasureTextEx(tool_font, "Size", FONT_SZ, 1).x + 4;
       float val_x = s_popup_pos.x + BOX_PAD + lab_w;
       char szbuf[16];
@@ -260,9 +270,26 @@ void toolbox_handle_input(void) {
       float t = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
       set_size(SLIDER_MIN + t * (slider_max() - SLIDER_MIN));
       return;
-    } else {
-      s_dragging_slider = false;
     }
+    s_dragging_slider = false;
+    return;
+  }
+
+  // ── zoom slider drag ──────────────────────────────────────
+  if (s_dragging_zoom) {
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+      float lab_w = MeasureTextEx(tool_font, "Zoom", FONT_SZ, 1).x + 4;
+      float val_x = s_popup_pos.x + BOX_PAD + lab_w;
+      float val_w = 36;
+      float sl_x  = val_x + val_w + 4;
+      float sl_w  = s_popup_pos.x + BOX_W - BOX_PAD - sl_x;
+      if (sl_w < 20) sl_w = 20;
+      float s = -1.0F + Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F) * 2.0F;
+      g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
+      return;
+    }
+    s_dragging_zoom = false;
+    return;
   }
 
   if (!in_box) return;
@@ -321,15 +348,38 @@ void toolbox_handle_input(void) {
     return;
   }
 
-  // Row 4: [Clear] [Fit]
-  float cy4 = row_y(4);
-  if (CheckCollisionPointRec(m, (Rectangle){ xl, cy4, BTN_W, ROW_H })) {
+  // Row 4: Zoom slider
+  {
+    float cy4 = row_y(4);
+    float lab_w = MeasureTextEx(tool_font, "Zoom", FONT_SZ, 1).x + 4;
+    float val_x = s_popup_pos.x + BOX_PAD + lab_w;
+    float val_w = 36;
+    char zbuf[16];
+    snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
+    float zv_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
+    if (val_w < zv_w) val_w = zv_w;
+    float sl_x = val_x + val_w + 4;
+    float sl_w = s_popup_pos.x + BOX_W - BOX_PAD - sl_x;
+    if (sl_w < 20) sl_w = 20;
+
+    // Click on slider
+    if (CheckCollisionPointRec(m, (Rectangle){ sl_x, cy4, sl_w, ROW_H })) {
+      float s = -1.0F + Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F) * 2.0F;
+      g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
+      s_dragging_zoom = true;
+      return;
+    }
+  }
+
+  // Row 5: [Clear] [Fit]
+  float cy5 = row_y(5);
+  if (CheckCollisionPointRec(m, (Rectangle){ xl, cy5, BTN_W, ROW_H })) {
     hl_lines_clear();
     if (g_state->black_board_enabled) bb_lines_clear();
     else lines_clear();
     return;
   }
-  if (CheckCollisionPointRec(m, (Rectangle){ xr, cy4, BTN_W, ROW_H })) {
+  if (CheckCollisionPointRec(m, (Rectangle){ xr, cy5, BTN_W, ROW_H })) {
     if (g_state->image_w > 0 && g_state->image_h > 0) {
       float fw = (float)GetScreenWidth();
       float fh = (float)GetScreenHeight();
@@ -427,12 +477,42 @@ void toolbox_render(void) {
   DrawRectangleLines(c2x, cc_y_off, cc_w, cc_w, (Color){ 80, 80, 80, 255 });
   update_tooltip("Color 2 (swap with X)", (Rectangle){ c2x, cy3, cc_w, ROW_H });
 
-  // Row 4: [Clear] [Fit]
-  float cy4 = row_y(4);
-  draw_tool_button(xl, cy4, "Clear", trash_tex, false, false);
-  update_tooltip("Clear strokes (active layer)", (Rectangle){ xl, cy4, BTN_W, ROW_H });
-  draw_tool_button(xr, cy4, "Fit", fit_tex, false, false);
-  update_tooltip("Fit image to screen", (Rectangle){ xr, cy4, BTN_W, ROW_H });
+  // Row 4: Zoom slider
+  {
+    float cy4 = row_y(4);
+    float txt_y4 = cy4 + (ROW_H - FONT_SZ) / 2;
+    float zx = s_popup_pos.x + BOX_PAD;
+    txt(zx, txt_y4, "Zoom", (Color){ 180, 180, 180, 255 });
+    zx += MeasureTextEx(tool_font, "Zoom", FONT_SZ, 1).x + 4;
+
+    char zbuf[16];
+    snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
+    float zv_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
+    txt(zx, txt_y4, zbuf, WHITE);
+    zx += zv_w + 4;
+
+    float zsl_w = s_popup_pos.x + BOX_W - BOX_PAD - zx;
+    if (zsl_w < 20) zsl_w = 20;
+    float track_y4 = cy4 + (ROW_H - SLIDER_H) / 2;
+    DrawRectangle(zx, track_y4, zsl_w, SLIDER_H, (Color){ 60, 60, 60, 255 });
+
+    float zt = (zoom_to_slider(g_state->zoom) + 1.0F) / 2.0F;
+    zt = Clamp(zt, 0.0F, 1.0F);
+    if (zt > 0)
+      DrawRectangle(zx, track_y4, (int)(zt * zsl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
+
+    float zthumb_x = zx + zt * zsl_w;
+    DrawCircleV((Vector2){ zthumb_x, track_y4 + SLIDER_H / 2.0F }, THUMB_R, (Color){ 200, 200, 200, 255 });
+    DrawCircleV((Vector2){ zthumb_x, track_y4 + SLIDER_H / 2.0F }, THUMB_R - 2, (Color){ 240, 240, 240, 255 });
+    update_tooltip("Zoom (drag to adjust)", (Rectangle){ zx, cy4, zsl_w, ROW_H });
+  }
+
+  // Row 5: [Clear] [Fit]
+  float cy5 = row_y(5);
+  draw_tool_button(xl, cy5, "Clear", trash_tex, false, false);
+  update_tooltip("Clear strokes (active layer)", (Rectangle){ xl, cy5, BTN_W, ROW_H });
+  draw_tool_button(xr, cy5, "Fit", fit_tex, false, false);
+  update_tooltip("Fit image to screen", (Rectangle){ xr, cy5, BTN_W, ROW_H });
 
   draw_tooltip_if_hovering();
 }
