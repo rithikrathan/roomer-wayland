@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
     }
 
     Color bg = g_configuration->background_color;
-    bg.a = 255;
+    if (!g_configuration->transparent_background) bg.a = 255;
     ClearBackground(bg);
     DrawTextureRec(
         img_render_texture.texture,

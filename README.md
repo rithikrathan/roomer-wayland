@@ -18,6 +18,7 @@ Options:
   -v,             --version                                  Show version and exit.
   -ms <float>,    --monitor-scaling <float>                  Compositor monitor scaling (default 1).
   -bg <rgba hex>, --background <rgba hex>                    Background color.
+  -t,             --transparent                              Transparent background.
 ```
 
 All defaults can be changed, if there is a need for adding more options, please open an issue.

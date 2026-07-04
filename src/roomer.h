@@ -70,6 +70,7 @@ typedef struct {
   float flashlight_radius_step;
   Color draw_color;
   float draw_thickness;
+  bool  transparent_background;
 } Configuration;
 
 extern Configuration g_default_configuration;

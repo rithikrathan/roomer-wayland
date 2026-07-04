@@ -15,6 +15,7 @@ Configuration g_default_configuration = {
   .flashlight_radius_step  = 20.0F,
   .draw_color              = RED,
   .draw_thickness          = 3.5F,
+  .transparent_background  = false,
 };
 
 Args g_default_args = {

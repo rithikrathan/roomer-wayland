@@ -74,6 +74,10 @@ void process_commandline_arguments(int argc, char** argv) {
       shift(argc, argv);
       continue;
     }
+    if (strcmp(*argv, "-t") == 0 || strcmp(*argv, "--transparent") == 0) {
+      g_configuration->transparent_background = true;
+      continue;
+    }
   }
 }
 
@@ -90,6 +94,7 @@ static void print_usage(FILE* sink) {
   (void)fprintf(sink, "  -ms <float>,    --monitor-scaling <float> %*s Compositor monitor scaling (default 1).\n", (int)strlen(g_args->program_name), " ");
   (void)fprintf(sink, "  -sd <path>,     --screenshot-dir <path>   %*s Folder to save screenshots in.\n", (int)strlen(g_args->program_name), " ");
   (void)fprintf(sink, "  -bg <rgba hex>, --background <rgba hex>   %*s Background color.\n", (int)strlen(g_args->program_name), " ");
+  (void)fprintf(sink, "  -t,             --transparent              %*s Transparent background.\n", (int)strlen(g_args->program_name), " ");
   // clang-format on
 }
 
