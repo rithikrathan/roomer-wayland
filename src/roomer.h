@@ -23,6 +23,8 @@
 typedef enum {
   TOOL_PEN,
   TOOL_ERASER,
+  TOOL_HIGHLIGHTER,
+  TOOL_COLOURPICKER,
 } ToolType;
 
 typedef struct {
@@ -42,6 +44,8 @@ typedef struct {
   ToolType current_tool;
   float   tool_pen_size;
   float   tool_eraser_size;
+  Color   color2;
+  bool    black_board_enabled;
   int     image_w;
   int     image_h;
 } State;
@@ -84,6 +88,16 @@ void handle_draw(void);
 void lines_draw(void);
 void lines_clear(void);
 void lines_erase_at(Vector2 screen_pos);
+void bb_lines_clear(void);
+void bb_lines_erase_at(Vector2 screen_pos);
+void bb_lines_draw(void);
+void hl_lines_clear(void);
+void hl_lines_erase_at(Vector2 screen_pos);
+void hl_lines_draw(void);
+
+Color open_color_picker(Color current);
+
+#define HIGHLIGHTER_ALPHA 0.3f
 
 void toolbox_toggle(void);
 bool toolbox_is_open(void);

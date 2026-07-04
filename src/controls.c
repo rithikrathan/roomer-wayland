@@ -37,6 +37,7 @@ static void handle_reset(void) {
     *g_state            = g_initial_state;
     s_flashlight_manual = false;
     lines_clear();
+    hl_lines_clear();
 
     g_state->toolbox_open     = saved_toolbox;
     g_state->current_tool     = saved_tool;
@@ -64,26 +65,27 @@ static void handle_panning(void) {
 }
 
 static void handle_zoom(void) {
-  float mouse_wheel_delta = GetMouseWheelMove();
-  if (mouse_wheel_delta != 0 && !g_state->is_drawing && !g_state->flashlight_enabled) {
-    Vector2 mouse_pos       = GetMousePosition();
-    float   prev_zoom       = g_state->zoom;
-    Vector2 world           = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
-    float   zoom_multiplier = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
-    g_state->target_zoom    = Clamp(
-        g_state->target_zoom + mouse_wheel_delta * g_configuration->zoom_step * zoom_multiplier,
-        g_configuration->zoom_min,
-        g_configuration->zoom_max
+  float wheel = GetMouseWheelMove();
+  if (wheel != 0 && !g_state->is_drawing && !g_state->flashlight_enabled) {
+    Vector2 mouse_pos = GetMousePosition();
+    float   prev_zoom = g_state->zoom;
+    Vector2 world     = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
+    float   mult      = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
+    g_state->target_zoom = Clamp(
+        g_state->target_zoom + wheel * g_configuration->zoom_step * mult,
+        g_configuration->zoom_min, g_configuration->zoom_max
     );
     g_state->target_pan.x = mouse_pos.x - world.x * g_state->target_zoom;
     g_state->target_pan.y = mouse_pos.y - world.y * g_state->target_zoom;
   }
 }
 
-// ── zoom via tablet ─────────────────────────────────────────
+// ── zoom via tablet (anchor-distance) ──────────────────────
 
-static bool    s_tablet_zooming  = false;
-static float   s_zoom_ref_y      = 0.0F;
+static bool    s_tab_zoom_active  = false;
+static Vector2 s_tab_zoom_anchor  = { 0 };
+static float   s_tab_zoom_ref_zoom = 1.0F;
+static Vector2 s_tab_zoom_ref_pan  = { 0 };
 
 static void handle_tablet_zoom(void) {
   if (!g_tablet.present) return;
@@ -92,21 +94,27 @@ static void handle_tablet_zoom(void) {
   bool zoom_on = (ctrl && g_tablet.touching) || g_tablet.button2;
 
   if (zoom_on) {
-    if (!s_tablet_zooming) {
-      s_tablet_zooming = true;
-      s_zoom_ref_y     = GetMousePosition().y;
+    if (!s_tab_zoom_active) {
+      s_tab_zoom_active   = true;
+      s_tab_zoom_anchor   = GetMousePosition();
+      s_tab_zoom_ref_zoom = g_state->zoom;
+      s_tab_zoom_ref_pan  = g_state->pan;
     } else {
-      float dy         = s_zoom_ref_y - GetMousePosition().y;
-      s_zoom_ref_y     = GetMousePosition().y;
-      float zoom_mult  = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) ? 0.33F : 1.0F;
+      Vector2 pos = GetMousePosition();
+      float dist = Vector2Distance(pos, s_tab_zoom_anchor);
       g_state->target_zoom = Clamp(
-          g_state->target_zoom + dy * g_configuration->zoom_step * zoom_mult * 0.05F,
-          g_configuration->zoom_min,
-          g_configuration->zoom_max
+          s_tab_zoom_ref_zoom * (1.0F + dist * 0.005F),
+          g_configuration->zoom_min, g_configuration->zoom_max
       );
+      Vector2 world_anchor = {
+          (s_tab_zoom_anchor.x - s_tab_zoom_ref_pan.x) / s_tab_zoom_ref_zoom,
+          (s_tab_zoom_anchor.y - s_tab_zoom_ref_pan.y) / s_tab_zoom_ref_zoom
+      };
+      g_state->target_pan.x = s_tab_zoom_anchor.x - world_anchor.x * g_state->target_zoom;
+      g_state->target_pan.y = s_tab_zoom_anchor.y - world_anchor.y * g_state->target_zoom;
     }
   } else {
-    s_tablet_zooming = false;
+    s_tab_zoom_active = false;
   }
 }
 
@@ -214,4 +222,13 @@ static void handle_screenshot(void) {
 
 static void handle_toolbox(void) {
   if (IsKeyPressed(KEY_C)) toolbox_toggle();
+  if (IsKeyPressed(KEY_X)) {
+    Color tmp = g_configuration->draw_color;
+    g_configuration->draw_color = g_state->color2;
+    g_state->color2 = tmp;
+  }
+  if (IsKeyPressed(KEY_ONE))   g_state->current_tool = TOOL_PEN;
+  if (IsKeyPressed(KEY_TWO))   g_state->current_tool = TOOL_ERASER;
+  if (IsKeyPressed(KEY_THREE)) g_state->current_tool = TOOL_HIGHLIGHTER;
+  if (IsKeyPressed(KEY_B))     g_state->black_board_enabled = !g_state->black_board_enabled;
 }

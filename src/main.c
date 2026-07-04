@@ -138,6 +138,25 @@ int main(int argc, char** argv) {
         WHITE
     );
 
+    // ── infinite black board overlay ─────────────────────────
+    if (g_state->black_board_enabled) {
+      int sw = GetScreenWidth();
+      int sh = GetScreenHeight();
+      DrawRectangle(0, 0, sw, sh, BLACK);
+
+      float spacing = 50.0F * g_state->zoom;
+      if (spacing < 4.0F) spacing = 4.0F;
+      for (float sx = fmodf(g_state->pan.x, spacing) - spacing; sx < sw; sx += spacing) {
+        for (float sy = fmodf(g_state->pan.y, spacing) - spacing; sy < sh; sy += spacing) {
+          DrawCircleV((Vector2){ sx, sy }, 1.5F, (Color){ 60, 60, 60, 255 });
+        }
+      }
+      bb_lines_draw();
+    }
+
+    // ── highlighter overlay ──────────────────────────────────
+    hl_lines_draw();
+
     if (g_state->flashlight_rendering) EndShaderMode();
 
     toolbox_render();
