@@ -2,6 +2,7 @@
   <h1>Roomer</h1>
   <h3>zoomer application for linux</h3>
 </div>
+
 ## Demo
 
 ![Demo](https://raw.githubusercontent.com/rithikrathan/roomer-wayland/master/assets/demo.gif)
@@ -18,7 +19,6 @@ Options:
   -sd <path>,     --screenshot-dir <path>                    Folder to save screenshots in.
   -ms <float>,    --monitor-scaling <float>                  Compositor monitor scaling (default 1).
   -bg <rgba hex>, --background <rgba hex>                    Background color.
-
 ```
 
 All defaults can be changed, if there is a need for adding more options, please open an issue.
@@ -42,6 +42,26 @@ In case you are using monitor scaling, pass the same value to the `--monitor-sca
 monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 ```
 
+## Features
+
+- **Pen, Eraser, Highlighter** – three drawing tools with adjustable size
+- **Black Board** – infinite canvas overlay with dot grid for sketching
+- **Toolbox** – GUI popup with tool selection, size slider, zoom slider, color pickers, clear & fit buttons
+- **Flashlight** – shader-based spotlight with smooth animations, adjustable radius
+- **Color picker** – pick colors via `yad` from the toolbox
+- **Color swap** – quickly toggle between two colors
+- **Keymaps overlay** – in-app keybinding reference (`H`)
+- **Reset view** – reset zoom, pan, and annotations (`0`)
+- **Fit to screen** – fit image to window (`A` or toolbox button)
+- **Smooth zoom & pan** – lerp-based smooth transitions
+- **Bezier spline smoothing** – quadratic bezier curves for smooth strokes
+- **Highlighter** – premultiplied alpha blending via render texture for proper overlay
+- **Tablet support** – evdev pen with pressure sensitivity, absolute positioning, barrel buttons
+- **Tablet zoom** – anchor-distance zoom (Ctrl+touch or pen button2)
+- **Pen pan** – pan using pen barrel button 1
+- **Eraser** – per-stroke erasing (hits detection via distance-to-segment)
+- **Clear** – clear current layer strokes
+
 ## Keybindings
 
 | Input                  | Action                                                  |
@@ -54,6 +74,7 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 | `F`                    | Toggle Flashlight                                       |
 | `H`                    | Toggle Keybindings help                                 |
 | `X`                    | Swap colors                                             |
+| `A`                    | Fit image to screen                                     |
 | `0`                    | Reset view                                              |
 | `ESC` / `Q`           | Quit                                                    |
 | Left Mouse Drag        | Pan                                                     |
@@ -61,6 +82,10 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 | Mouse Wheel            | Zoom In / Out                                           |
 | Shift + Mouse Wheel    | Fine zoom (3× slower)                                   |
 | Mouse Wheel (flashlight)| Change flashlight radius                               |
+| Pen                    | Draw (with pressure)                                    |
+| Pen Barrel Button 1    | Pan                                                     |
+| Pen Barrel Button 2    | Zoom (anchor-distance)                                  |
+| Ctrl + Pen Touch       | Zoom (anchor-distance, alternative)                     |
 
 ## Installation
 
@@ -77,6 +102,7 @@ make build
 - glfw
 - grim (for taking the screenshot, any other screenshot tool that can output to stdout works)
 - wl-copy (optional, for screenshots to clipboard)
+- yad (optional, for color picker)
 
 ## Development
 
