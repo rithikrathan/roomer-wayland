@@ -68,10 +68,55 @@ void handle_inputs(void) {
     return;
   }
 
+  if (g_state->is_editing_badge_text) {
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+      g_state->is_editing_badge_text = false;
+      return;
+    }
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+      int len = (int)strlen(g_state->badge_custom_text);
+      if (len > 0) g_state->badge_custom_text[len - 1] = '\0';
+      return;
+    }
+    int ch = GetCharPressed();
+    while (ch > 0) {
+      int len = (int)strlen(g_state->badge_custom_text);
+      if (len < 15 && ch >= 32 && ch <= 126) {
+        g_state->badge_custom_text[len] = (char)ch;
+        g_state->badge_custom_text[len + 1] = '\0';
+      }
+      ch = GetCharPressed();
+    }
+    return;
+  }
+
+  // Super + H toggles hide overlay
+  bool super = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
+  if (super && IsKeyPressed(KEY_H)) {
+    toggle_hide_overlay();
+    return;
+  }
+
+  // Polygon active keyboard interactions
+  if (g_state->poly_active) {
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      polygon_cancel();
+      return;
+    }
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+      polygon_pop_last_point();
+      return;
+    }
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+      polygon_commit();
+      return;
+    }
+  }
+
   handle_toolbox();
   if (g_state->toolbox_open) toolbox_handle_input();
 
-  if (IsKeyPressed(KEY_H)) {
+  if (!super && IsKeyPressed(KEY_H)) {
     g_state->keymaps_open = !g_state->keymaps_open;
     if (g_state->keymaps_open) g_state->toolbox_open = false;
   }
@@ -103,24 +148,29 @@ static void handle_reset(void) {
   bool ctrl  = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
   if ((shift && IsKeyPressed(KEY_ZERO)) || (ctrl && IsKeyPressed(KEY_R))) {
-    bool     saved_toolbox        = g_state->toolbox_open;
-    ToolType saved_tool           = g_state->current_tool;
-    float    saved_pen_size       = g_state->tool_pen_size;
-    float    saved_eraser_size    = g_state->tool_eraser_size;
-    float    saved_hl_size        = g_state->tool_highlighter_size;
-    Color    saved_color1         = g_state->color1;
-    Color    saved_color2         = g_state->color2;
-    int      saved_active         = g_state->active_swatch;
-    float    saved_shape_thick    = g_state->shape_thickness;
-    float    saved_badge_thick    = g_state->badge_border_thickness;
-    Color    saved_shape_col      = g_state->shape_border_color;
-    Color    saved_fill_col       = g_state->fill_color;
-    float    saved_fill_op        = g_state->shape_fill_opacity;
-    bool     saved_filled         = g_state->shape_filled;
-    StrokeStyle saved_style       = g_state->shape_stroke_style;
-    float    saved_font_sz        = g_state->text_font_size;
-    bool     saved_bold           = g_state->text_bold;
-    bool     saved_italic         = g_state->text_italic;
+    bool      saved_toolbox        = g_state->toolbox_open;
+    ToolType  saved_tool           = g_state->current_tool;
+    float     saved_pen_size       = g_state->tool_pen_size;
+    float     saved_eraser_size    = g_state->tool_eraser_size;
+    float     saved_hl_size        = g_state->tool_highlighter_size;
+    Color     saved_color1         = g_state->color1;
+    Color     saved_color2         = g_state->color2;
+    int       saved_active         = g_state->active_swatch;
+    float     saved_shape_thick    = g_state->shape_thickness;
+    float     saved_badge_thick    = g_state->badge_border_thickness;
+    float     saved_badge_sz       = g_state->badge_size;
+    BadgeMode saved_badge_mode     = g_state->badge_mode;
+    int       saved_ngon_sides     = g_state->ngon_sides;
+    char      saved_badge_txt[16];
+    strncpy(saved_badge_txt, g_state->badge_custom_text, sizeof(saved_badge_txt));
+    Color     saved_shape_col      = g_state->shape_border_color;
+    Color     saved_fill_col       = g_state->fill_color;
+    float     saved_fill_op        = g_state->shape_fill_opacity;
+    bool      saved_filled         = g_state->shape_filled;
+    StrokeStyle saved_style        = g_state->shape_stroke_style;
+    float     saved_font_sz        = g_state->text_font_size;
+    bool      saved_bold           = g_state->text_bold;
+    bool      saved_italic         = g_state->text_italic;
 
     *g_state            = g_initial_state;
     s_flashlight_manual = false;
@@ -136,6 +186,10 @@ static void handle_reset(void) {
     g_state->active_swatch         = saved_active;
     g_state->shape_thickness       = saved_shape_thick;
     g_state->badge_border_thickness= saved_badge_thick;
+    g_state->badge_size            = saved_badge_sz;
+    g_state->badge_mode            = saved_badge_mode;
+    g_state->ngon_sides            = saved_ngon_sides;
+    strncpy(g_state->badge_custom_text, saved_badge_txt, sizeof(g_state->badge_custom_text));
     g_state->shape_border_color    = saved_shape_col;
     g_state->fill_color            = saved_fill_col;
     g_state->shape_fill_opacity    = saved_fill_op;
@@ -253,13 +307,15 @@ static float* current_tool_size_ptr(void) {
 
 static float current_tool_size_min(void) {
   if (g_state->current_tool == TOOL_HIGHLIGHTER) return 10.0F;
-  if (g_state->current_tool == TOOL_ERASER) return 5.0F;
+  if (g_state->current_tool == TOOL_ERASER) return 6.0F;
   return 0.5F;
 }
 
 static float current_tool_size_max(void) {
-  if (g_state->current_tool == TOOL_PEN) return 10.0F;
-  return 60.0F;
+  if (g_state->current_tool == TOOL_PEN) return 8.0F;
+  if (g_state->current_tool == TOOL_HIGHLIGHTER) return 36.0F;
+  if (g_state->current_tool == TOOL_ERASER) return 36.0F;
+  return 36.0F;
 }
 
 static void handle_size_keys(void) {
@@ -307,18 +363,38 @@ void draw_size_indicator(void) {
   }
 
   if (g_state->current_tool == TOOL_STEP_BADGE) {
-    float badge_r = fmaxf(g_state->shape_thickness * 2.8f, 18.0f);
+    float badge_r = g_state->badge_size;
     Color c = g_state->shape_border_color;
-    DrawCircleV(m, badge_r, (Color){ c.r, c.g, c.b, 60 });
-    DrawCircleLinesV(m, badge_r, c);
-
-    char num_str[16];
-    snprintf(num_str, sizeof(num_str), "%d", g_state->step_badge_counter);
+    char num_str[32];
+    badge_step_number_to_string(g_state->step_badge_counter, g_state->badge_mode, g_state->badge_custom_text, num_str, sizeof(num_str));
     Font font = get_app_font();
-    float font_size = badge_r * 1.25f;
+    float font_size = badge_r * 1.15f;
     Vector2 text_dim = MeasureTextEx(font, num_str, font_size, 1.0f);
+
+    float diam = badge_r * 2.0f;
+    float pad_x = badge_r * 0.55f;
+    float badge_w = fmaxf(diam, text_dim.x + pad_x * 2.0f);
+    float badge_h = diam;
+
+    if (badge_w <= diam + 0.1f) {
+      DrawCircleV(m, badge_r, (Color){ c.r, c.g, c.b, 60 });
+      DrawCircleLinesV(m, badge_r, c);
+    } else {
+      Rectangle rec = { m.x - badge_w * 0.5f, m.y - badge_h * 0.5f, badge_w, badge_h };
+      DrawRectangleRounded(rec, 0.5f, 16, (Color){ c.r, c.g, c.b, 60 });
+      DrawRectangleRoundedLinesEx(rec, 0.5f, 16, 2.0f, c);
+    }
+
     Vector2 text_pos = { m.x - text_dim.x * 0.5f, m.y - text_dim.y * 0.5f };
     DrawTextEx(font, num_str, text_pos, font_size, 1.0f, c);
+    return;
+  }
+
+  if (g_state->current_tool == TOOL_POLYGON && !g_state->poly_active) {
+    Color c = g_state->shape_border_color;
+    DrawCircleLines((int)m.x, (int)m.y, 6.0f, c);
+    DrawLine((int)m.x - 10, (int)m.y, (int)m.x + 10, (int)m.y, c);
+    DrawLine((int)m.x, (int)m.y - 10, (int)m.x, (int)m.y + 10, c);
     return;
   }
 
@@ -337,6 +413,9 @@ void draw_size_indicator(void) {
     }
   } else {
     Color c = g_configuration->draw_color;
+    if (g_state->current_tool >= TOOL_LINE && g_state->current_tool <= TOOL_TABLE) {
+      c = g_state->shape_border_color;
+    }
     unsigned char alpha_fill = (g_state->current_tool == TOOL_HIGHLIGHTER) ? 40 : 25;
     if (adjusting) alpha_fill += 30;
 
@@ -390,16 +469,18 @@ static void handle_toolbox(void) {
 
   // Tool 1: Pen / Highlighter (Shift+1)
   if (IsKeyPressed(KEY_ONE)) {
+    polygon_cancel();
     if (shift) {
       g_state->current_tool = TOOL_HIGHLIGHTER;
     } else {
       g_state->current_tool = TOOL_PEN;
-      if (g_state->tool_pen_size > 10.0F) g_state->tool_pen_size = 10.0F;
+      if (g_state->tool_pen_size > 8.0F) g_state->tool_pen_size = 8.0F;
     }
   }
 
   // Tool 2: Eraser
   if (IsKeyPressed(KEY_TWO)) {
+    polygon_cancel();
     g_state->current_tool = TOOL_ERASER;
   }
 
@@ -408,6 +489,7 @@ static void handle_toolbox(void) {
     if (g_state->current_tool == TOOL_LINE) {
       g_state->shape_stroke_style = (g_state->shape_stroke_style + 1) % 3;
     } else {
+      polygon_cancel();
       g_state->current_tool = TOOL_LINE;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
@@ -418,27 +500,30 @@ static void handle_toolbox(void) {
     if (g_state->current_tool == TOOL_ARROW) {
       g_state->shape_stroke_style = (g_state->shape_stroke_style + 1) % 3;
     } else {
+      polygon_cancel();
       g_state->current_tool = TOOL_ARROW;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
   }
 
-  // Tool 5: Triangle
+  // Tool 5: Polygon
   if (IsKeyPressed(KEY_FIVE)) {
-    if (g_state->current_tool == TOOL_TRIANGLE) {
+    if (g_state->current_tool == TOOL_POLYGON) {
       g_state->shape_stroke_style = (g_state->shape_stroke_style + 1) % 3;
     } else {
-      g_state->current_tool = TOOL_TRIANGLE;
+      polygon_cancel();
+      g_state->current_tool = TOOL_POLYGON;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
   }
 
-  // Tool 6: Rectangle
+  // Tool 6: N-Gon
   if (IsKeyPressed(KEY_SIX)) {
-    if (g_state->current_tool == TOOL_RECTANGLE) {
+    if (g_state->current_tool == TOOL_NGON) {
       g_state->shape_stroke_style = (g_state->shape_stroke_style + 1) % 3;
     } else {
-      g_state->current_tool = TOOL_RECTANGLE;
+      polygon_cancel();
+      g_state->current_tool = TOOL_NGON;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
   }
@@ -448,6 +533,7 @@ static void handle_toolbox(void) {
     if (g_state->current_tool == TOOL_CIRCLE) {
       g_state->shape_stroke_style = (g_state->shape_stroke_style + 1) % 3;
     } else {
+      polygon_cancel();
       g_state->current_tool = TOOL_CIRCLE;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
@@ -455,11 +541,13 @@ static void handle_toolbox(void) {
 
   // Tool 8: Step Badge
   if (IsKeyPressed(KEY_EIGHT)) {
+    polygon_cancel();
     g_state->current_tool = TOOL_STEP_BADGE;
   }
 
   // Tool 9: Text
   if (IsKeyPressed(KEY_NINE)) {
+    polygon_cancel();
     g_state->current_tool = TOOL_TEXT;
   }
 
@@ -468,6 +556,7 @@ static void handle_toolbox(void) {
     if (g_state->current_tool == TOOL_TABLE) {
       g_state->shape_stroke_style = (g_state->shape_stroke_style + 1) % 3;
     } else {
+      polygon_cancel();
       g_state->current_tool = TOOL_TABLE;
       g_state->shape_stroke_style = STYLE_SOLID;
     }

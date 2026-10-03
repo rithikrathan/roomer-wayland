@@ -27,14 +27,17 @@ typedef enum {
   TOOL_ERASER = 2,
   TOOL_LINE = 3,
   TOOL_ARROW = 4,
-  TOOL_TRIANGLE = 5,
-  TOOL_RECTANGLE = 6,
+  TOOL_POLYGON = 5,
+  TOOL_NGON = 6,
   TOOL_CIRCLE = 7,
   TOOL_STEP_BADGE = 8,
   TOOL_TEXT = 9,
   TOOL_TABLE = 10,
   TOOL_COUNT = 11,
 } ToolType;
+
+#define TOOL_TRIANGLE TOOL_POLYGON
+#define TOOL_RECTANGLE TOOL_NGON
 
 typedef enum {
   STYLE_SOLID = 0,
@@ -52,13 +55,23 @@ typedef enum {
   SHAPE_FREEHAND = 0,
   SHAPE_LINE = 1,
   SHAPE_ARROW = 2,
-  SHAPE_TRIANGLE = 3,
-  SHAPE_RECTANGLE = 4,
+  SHAPE_POLYGON = 3,
+  SHAPE_NGON = 4,
   SHAPE_CIRCLE = 5,
   SHAPE_STEP_BADGE = 6,
   SHAPE_TEXT = 7,
   SHAPE_TABLE = 8,
 } ShapeType;
+
+#define SHAPE_TRIANGLE SHAPE_POLYGON
+#define SHAPE_RECTANGLE SHAPE_NGON
+
+typedef enum {
+  BADGE_MODE_NUMERIC     = 0,
+  BADGE_MODE_ALPHA_UPPER = 1,
+  BADGE_MODE_ALPHA_LOWER = 2,
+  BADGE_MODE_CUSTOM      = 3,
+} BadgeMode;
 
 typedef struct {
   ShapeType   type;
@@ -78,6 +91,9 @@ typedef struct {
   bool        text_bold;
   bool        text_italic;
   float       badge_thickness;
+  float       badge_size;
+  BadgeMode   badge_mode;
+  int         ngon_sides;
   int         table_rows;
   int         table_cols;
   // Cairo rasterized texture cache
@@ -122,6 +138,17 @@ typedef struct {
   Color       fill_color;
   float       shape_thickness;
   float       badge_border_thickness;
+  float       badge_size;
+  BadgeMode   badge_mode;
+  char        badge_custom_text[16];
+  bool        is_editing_badge_text;
+  int         ngon_sides;
+  // In-progress polygon:
+  Vector2*    poly_pts;
+  int         poly_pts_count;
+  int         poly_pts_capacity;
+  bool        poly_active;
+  bool        hide_overlay;
   bool        text_bold;
   bool        text_italic;
   float       text_font_size;
@@ -159,6 +186,7 @@ typedef struct {
   bool  daemon_mode;
   bool  quit_daemon;
   bool  no_daemon;
+  bool  toggle_daemon;
 } Configuration;
 
 extern Configuration g_default_configuration;
@@ -199,6 +227,11 @@ void stroke_toggle_fill_last(void);
 void step_badge_pop_last(void);
 void text_commit_current(void);
 void text_cancel_current(void);
+void polygon_cancel(void);
+void polygon_commit(void);
+void polygon_pop_last_point(void);
+void toggle_hide_overlay(void);
+void badge_step_number_to_string(int num, BadgeMode mode, const char* custom, char* out, size_t out_sz);
 Font get_app_font(void);
 
 // Compatibility wrappers

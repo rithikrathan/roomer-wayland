@@ -134,6 +134,11 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (g_configuration->toggle_daemon) {
+    daemon_handle_toggle_flag();
+    return 0;
+  }
+
   if (g_configuration->daemon_mode) {
     return daemon_server_run();
   }

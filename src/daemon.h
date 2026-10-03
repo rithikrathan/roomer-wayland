@@ -5,6 +5,9 @@
 // Check if -q / --quit was requested. If so, sends QUIT command to running daemon and exits.
 void daemon_handle_quit_flag(void);
 
+// Check if -tg / --toggle was requested. If so, sends TOGGLE command to running daemon and exits.
+void daemon_handle_toggle_flag(void);
+
 // Try to send stdin image to running daemon.
 // Returns true if sent successfully to daemon (caller can exit(0)).
 // Returns false if daemon is not running (caller should run standalone).

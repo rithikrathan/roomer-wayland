@@ -11,9 +11,10 @@
 #define ROOMER_MAGIC 0x524F4F4D
 
 typedef enum {
-  ROOMER_CMD_IMAGE = 1,
-  ROOMER_CMD_QUIT  = 2,
-  ROOMER_CMD_PING  = 3,
+  ROOMER_CMD_IMAGE  = 1,
+  ROOMER_CMD_QUIT   = 2,
+  ROOMER_CMD_PING   = 3,
+  ROOMER_CMD_TOGGLE = 4,
 } DaemonCmd;
 
 typedef struct {
@@ -92,6 +93,23 @@ void daemon_handle_quit_flag(void) {
   (void)write(fd, &hdr, sizeof(hdr));
   close(fd);
   fprintf(stdout, "Roomer daemon stopped.\n");
+}
+
+void daemon_handle_toggle_flag(void) {
+  int fd = daemon_connect();
+  if (fd < 0) {
+    fprintf(stderr, "Roomer daemon is not running.\n");
+    return;
+  }
+
+  DaemonHeader hdr = {
+    .magic = ROOMER_MAGIC,
+    .cmd   = ROOMER_CMD_TOGGLE,
+  };
+  (void)write(fd, &hdr, sizeof(hdr));
+  char ack = 0;
+  (void)read(fd, &ack, 1);
+  close(fd);
 }
 
 bool daemon_client_send_image(void) {
@@ -252,6 +270,20 @@ int daemon_server_run(void) {
             s_daemon_running = 0;
             close(client_fd);
             break;
+          }
+          if (hdr.cmd == ROOMER_CMD_TOGGLE) {
+            if (is_visible) {
+              SetWindowState(FLAG_WINDOW_HIDDEN);
+              is_visible = false;
+            } else {
+              ClearWindowState(FLAG_WINDOW_HIDDEN);
+              SetWindowFocused();
+              is_visible = true;
+            }
+            char ack = 1;
+            (void)write(client_fd, &ack, 1);
+            close(client_fd);
+            continue;
           }
           if (hdr.cmd == ROOMER_CMD_IMAGE && hdr.data_len > 0) {
             unsigned char* img_buf = malloc(hdr.data_len);
