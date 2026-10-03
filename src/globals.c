@@ -41,6 +41,7 @@ State g_initial_state = {
   .is_drawing                = false,
   .toolbox_open              = false,
   .keymaps_open              = false,
+  .should_quit               = false,
   .current_tool              = TOOL_PEN,
   .tool_pen_size             = 3.5F,
   .tool_eraser_size          = 20.0F,

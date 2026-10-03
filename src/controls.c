@@ -12,15 +12,31 @@ static void handle_flashlight(void);
 static void handle_toolbox(void);
 
 static void handle_text_input(void) {
-  int ch = GetCharPressed();
-  while (ch > 0) {
-    int len = (int)strlen(g_state->text_buffer);
-    if (len < (int)sizeof(g_state->text_buffer) - 2) {
-      g_state->text_buffer[len] = (char)ch;
-      g_state->text_buffer[len + 1] = '\0';
-      g_state->text_cursor = len + 1;
+  if (IsKeyPressed(KEY_ESCAPE)) {
+    text_cancel_current();
+    return;
+  }
+
+  bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+  bool ctrl  = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+
+  if (ctrl && IsKeyPressed(KEY_C)) {
+    text_cancel_current();
+    return;
+  }
+
+  if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+    if (shift) {
+      int len = (int)strlen(g_state->text_buffer);
+      if (len < (int)sizeof(g_state->text_buffer) - 2) {
+        g_state->text_buffer[len] = '\n';
+        g_state->text_buffer[len + 1] = '\0';
+        g_state->text_cursor = len + 1;
+      }
+    } else {
+      text_commit_current();
+      return;
     }
-    ch = GetCharPressed();
   }
 
   if (IsKeyPressed(KEY_BACKSPACE)) {
@@ -31,17 +47,15 @@ static void handle_text_input(void) {
     }
   }
 
-  if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+  int ch = GetCharPressed();
+  while (ch > 0) {
     int len = (int)strlen(g_state->text_buffer);
     if (len < (int)sizeof(g_state->text_buffer) - 2) {
-      g_state->text_buffer[len] = '\n';
+      g_state->text_buffer[len] = (char)ch;
       g_state->text_buffer[len + 1] = '\0';
       g_state->text_cursor = len + 1;
     }
-  }
-
-  if (IsKeyPressed(KEY_ESCAPE)) {
-    text_commit_current();
+    ch = GetCharPressed();
   }
 }
 
@@ -61,7 +75,20 @@ void handle_inputs(void) {
     g_state->keymaps_open = !g_state->keymaps_open;
     if (g_state->keymaps_open) g_state->toolbox_open = false;
   }
-  if (g_state->keymaps_open && IsKeyPressed(KEY_ESCAPE)) g_state->keymaps_open = false;
+  if (g_state->keymaps_open && IsKeyPressed(KEY_ESCAPE)) {
+    g_state->keymaps_open = false;
+    return;
+  }
+
+  if (g_state->toolbox_open && IsKeyPressed(KEY_ESCAPE)) {
+    g_state->toolbox_open = false;
+    return;
+  }
+
+  if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) {
+    g_state->should_quit = true;
+    return;
+  }
 
   handle_reset();
   handle_fit();

@@ -211,6 +211,28 @@ void step_badge_pop_last(void) {
   }
 }
 
+static Texture2D s_live_tex = { 0 };
+static char      s_last_live_buf[1024] = { 0 };
+static float     s_last_live_sz = 0;
+static bool      s_last_live_bold = false;
+static bool      s_last_live_italic = false;
+static Vector2   s_last_live_dim = { 0 };
+
+void text_cancel_current(void) {
+  g_state->is_editing_text = false;
+  g_state->text_buffer[0] = '\0';
+  g_state->text_cursor = 0;
+  if (s_live_tex.id != 0) {
+    UnloadTexture(s_live_tex);
+    s_live_tex = (Texture2D){ 0 };
+  }
+  s_last_live_buf[0] = '\0';
+  s_last_live_sz = 0;
+  s_last_live_bold = false;
+  s_last_live_italic = false;
+  s_last_live_dim = (Vector2){ 0, 0 };
+}
+
 void text_commit_current(void) {
   if (!g_state->is_editing_text) return;
   if (strlen(g_state->text_buffer) > 0) {
@@ -248,9 +270,7 @@ void text_commit_current(void) {
 
     l->dirty = true;
   }
-  g_state->is_editing_text = false;
-  g_state->text_buffer[0] = '\0';
-  g_state->text_cursor = 0;
+  text_cancel_current();
 }
 
 void draw_clear_layer(DrawLayer layer) {
@@ -268,10 +288,12 @@ void draw_clear_layer(DrawLayer layer) {
 }
 
 void draw_clear_current(void) {
+  text_cancel_current();
   draw_clear_layer(g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE);
 }
 
 void draw_clear_all(void) {
+  text_cancel_current();
   for (int i = 0; i < LAYER_COUNT; i++) {
     draw_clear_layer((DrawLayer)i);
   }
@@ -287,6 +309,7 @@ void draw_clear_dirty(DrawLayer layer) {
 }
 
 void draw_cleanup(void) {
+  text_cancel_current();
   if (s_hl_rt.id != 0) {
     UnloadRenderTexture(s_hl_rt);
     s_hl_rt   = (RenderTexture2D){ 0 };
@@ -886,13 +909,6 @@ void draw_layer_normal(DrawLayer layer) {
       Color c = g_state->shape_border_color;
       Color fc = g_state->fill_color;
       fc.a = (unsigned char)(g_state->shape_fill_opacity * 255.0f);
-
-      static Texture2D s_live_tex = { 0 };
-      static char      s_last_live_buf[1024] = { 0 };
-      static float     s_last_live_sz = 0;
-      static bool      s_last_live_bold = false;
-      static bool      s_last_live_italic = false;
-      static Vector2   s_last_live_dim = { 0 };
 
       if (s_live_tex.id == 0 || strcmp(s_last_live_buf, g_state->text_buffer) != 0 ||
           s_last_live_sz != font_size || s_last_live_bold != g_state->text_bold ||

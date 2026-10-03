@@ -301,6 +301,7 @@ int daemon_server_run(void) {
     }
 
     if (!is_visible) {
+      PollInputEvents();
       if (WindowShouldClose()) {
         GLFWwindow* win = glfwGetCurrentContext();
         if (win) glfwSetWindowShouldClose(win, GLFW_FALSE);
@@ -308,7 +309,8 @@ int daemon_server_run(void) {
       continue;
     }
 
-    if (WindowShouldClose() || IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) {
+    if (WindowShouldClose() || g_state->should_quit) {
+      g_state->should_quit = false;
       GLFWwindow* win = glfwGetCurrentContext();
       if (win) glfwSetWindowShouldClose(win, GLFW_FALSE);
       SetWindowState(FLAG_WINDOW_HIDDEN);

@@ -101,6 +101,7 @@ typedef struct {
   bool        is_drawing;
   bool        toolbox_open;
   bool        keymaps_open;
+  bool        should_quit;
   ToolType    current_tool;
   float       tool_pen_size;
   float       tool_eraser_size;
@@ -197,6 +198,7 @@ void draw_free_all_memory(void);
 void stroke_toggle_fill_last(void);
 void step_badge_pop_last(void);
 void text_commit_current(void);
+void text_cancel_current(void);
 Font get_app_font(void);
 
 // Compatibility wrappers

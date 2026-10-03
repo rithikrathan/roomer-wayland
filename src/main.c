@@ -178,11 +178,11 @@ int main(int argc, char** argv) {
   int    loc_darkness      = GetShaderLocation(flashlight_shader, "darkness");
 
   SetTargetFPS(120);
-  while (!WindowShouldClose()) {
-    if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) break;
+  while (!WindowShouldClose() && !g_state->should_quit) {
     app_render_frame(img_texture, flashlight_shader, loc_center, loc_radius, loc_darkness, loc_texture);
   }
 
+  draw_clear_all();
   draw_cleanup();
   tablet_cleanup();
   UnloadShader(flashlight_shader);
