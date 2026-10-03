@@ -49,6 +49,19 @@ State g_initial_state = {
   .color2                    = (Color){ 255, 255, 255, 255 },
   .active_swatch             = 0,
   .black_board_enabled       = false,
+  .shape_stroke_style        = STYLE_SOLID,
+  .shape_dash_len            = 14.0F,
+  .shape_dash_gap            = 8.0F,
+  .shape_filled              = false,
+  .shape_fill_opacity        = 0.35F,
+  .fill_color                = (Color){ 224, 40, 64, 90 },
+  .step_badge_counter        = 1,
+  .table_rows                = 3,
+  .table_cols                = 3,
+  .is_editing_text           = false,
+  .text_edit_world_pos       = (Vector2){ 0, 0 },
+  .text_buffer               = { 0 },
+  .text_cursor               = 0,
 };
 
 Configuration* g_configuration = NULL;

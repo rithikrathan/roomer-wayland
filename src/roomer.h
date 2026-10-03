@@ -21,14 +21,25 @@
 #include "tablet.h"
 
 typedef enum {
-  TOOL_PEN,
-  TOOL_ERASER,
-  TOOL_HIGHLIGHTER,
-  TOOL_LINE,
-  TOOL_RECTANGLE,
-  TOOL_CIRCLE,
-  TOOL_ARROW,
+  TOOL_PEN = 0,
+  TOOL_HIGHLIGHTER = 1,
+  TOOL_ERASER = 2,
+  TOOL_LINE = 3,
+  TOOL_ARROW = 4,
+  TOOL_TRIANGLE = 5,
+  TOOL_RECTANGLE = 6,
+  TOOL_CIRCLE = 7,
+  TOOL_STEP_BADGE = 8,
+  TOOL_TEXT = 9,
+  TOOL_TABLE = 10,
+  TOOL_COUNT = 11,
 } ToolType;
+
+typedef enum {
+  STYLE_SOLID = 0,
+  STYLE_DASHED = 1,
+  STYLE_DOTTED = 2,
+} StrokeStyle;
 
 typedef enum {
   LAYER_IMAGE = 0,
@@ -37,48 +48,75 @@ typedef enum {
 } DrawLayer;
 
 typedef enum {
-  SHAPE_FREEHAND,
-  SHAPE_LINE,
-  SHAPE_RECTANGLE,
-  SHAPE_CIRCLE,
-  SHAPE_ARROW,
+  SHAPE_FREEHAND = 0,
+  SHAPE_LINE = 1,
+  SHAPE_ARROW = 2,
+  SHAPE_TRIANGLE = 3,
+  SHAPE_RECTANGLE = 4,
+  SHAPE_CIRCLE = 5,
+  SHAPE_STEP_BADGE = 6,
+  SHAPE_TEXT = 7,
+  SHAPE_TABLE = 8,
 } ShapeType;
 
 typedef struct {
-  ShapeType type;
-  ToolType  tool;
-  Vector2*  points;
-  int       points_count;
-  int       points_capacity;
-  float     thickness;
-  Color     color;
+  ShapeType   type;
+  ToolType    tool;
+  Vector2*    points;
+  int         points_count;
+  int         points_capacity;
+  float       thickness;
+  Color       color;
+  StrokeStyle style;
+  float       dash_len;
+  float       dash_gap;
+  bool        filled;
+  Color       fill_color;
+  int         step_number;
+  char*       text;
+  int         table_rows;
+  int         table_cols;
 } Stroke;
 
 typedef struct {
-  Vector2 pan;
-  Vector2 target_pan;
-  float   zoom;
-  float   target_zoom;
-  bool    flashlight_enabled;
-  bool    flashlight_rendering;
-  bool    flashlight_prev_enabled;
-  float   flashlight_radius;
-  float   flashlight_display_radius;
-  float   flashlight_darkness;
-  float   target_flashlight_radius;
-  bool    is_drawing;
-  bool    toolbox_open;
-  bool    keymaps_open;
-  ToolType current_tool;
-  float   tool_pen_size;
-  float   tool_eraser_size;
-  float   tool_highlighter_size;
-  Color   color1;
-  Color   color2;
-  int     active_swatch;
-  bool    black_board_enabled;
-  int     image_w;
-  int     image_h;
+  Vector2     pan;
+  Vector2     target_pan;
+  float       zoom;
+  float       target_zoom;
+  bool        flashlight_enabled;
+  bool        flashlight_rendering;
+  bool        flashlight_prev_enabled;
+  float       flashlight_radius;
+  float       flashlight_display_radius;
+  float       flashlight_darkness;
+  float       target_flashlight_radius;
+  bool        is_drawing;
+  bool        toolbox_open;
+  bool        keymaps_open;
+  ToolType    current_tool;
+  float       tool_pen_size;
+  float       tool_eraser_size;
+  float       tool_highlighter_size;
+  Color       color1;
+  Color       color2;
+  int         active_swatch;
+  bool        black_board_enabled;
+  int         image_w;
+  int         image_h;
+  // Shape & tool customizations:
+  StrokeStyle shape_stroke_style;
+  float       shape_dash_len;
+  float       shape_dash_gap;
+  bool        shape_filled;
+  float       shape_fill_opacity;
+  Color       fill_color;
+  int         step_badge_counter;
+  int         table_rows;
+  int         table_cols;
+  bool        is_editing_text;
+  Vector2     text_edit_world_pos;
+  char        text_buffer[1024];
+  int         text_cursor;
 } State;
 
 typedef struct {
@@ -137,6 +175,10 @@ void draw_clear_current(void);
 void draw_clear_all(void);
 void draw_cleanup(void);
 void draw_free_all_memory(void);
+void stroke_toggle_fill_last(void);
+void step_badge_pop_last(void);
+void text_commit_current(void);
+Font get_app_font(void);
 
 // Compatibility wrappers
 void lines_draw(void);

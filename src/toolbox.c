@@ -6,33 +6,30 @@
 #include "fit_png.h"
 #include "font_ttf.h"
 
-#define BOX_W      220
-#define BOX_PAD    12
-#define ROW_H      42
-#define ROW_GAP    8
-#define BTN_W      88
-#define ICON_SZ    28
-#define FONT_SZ    26
-#define COLOR_SZ   44
-#define GAP_MD     10
+#define BOX_W      270
+#define BOX_PAD    10
+#define ROW_H      34
+#define ROW_GAP    6
+#define COLS_4_W   58
+#define GAP_4      6
+#define ICON_SZ    20
+#define FONT_SZ    18
+#define COLOR_SZ   38
+#define ROW_COUNT  8
+
 static Vector2 s_popup_pos = { 0 };
 
-// ── total popup height ──────────────────────────────────────
-
 static float box_height(void) {
-  return BOX_PAD + 6 * ROW_H + 5 * ROW_GAP + BOX_PAD;
+  return BOX_PAD + ROW_COUNT * ROW_H + (ROW_COUNT - 1) * ROW_GAP + BOX_PAD;
 }
-
-// ── row y offsets ───────────────────────────────────────────
 
 static float row_y(int row) {
   return s_popup_pos.y + BOX_PAD + row * (ROW_H + ROW_GAP);
 }
 
-static float btn_x_left(void)  { return s_popup_pos.x + BOX_PAD; }
-static float btn_x_right(void) { return s_popup_pos.x + BOX_PAD + BTN_W + GAP_MD; }
-
-// ── lazy-loaded assets ──────────────────────────────────────
+static float col_x(int col) {
+  return s_popup_pos.x + BOX_PAD + col * (COLS_4_W + GAP_4);
+}
 
 static Texture2D pen_tex   = { 0 };
 static Texture2D eras_tex  = { 0 };
@@ -87,22 +84,29 @@ static void load_assets(void) {
   if (tool_font.texture.id == 0) tool_font = GetFontDefault();
 }
 
-static void txt(float x, float y, const char* s, Color c) {
-  DrawTextEx(tool_font, s, (Vector2){ x, y }, FONT_SZ, 1, c);
+Font get_app_font(void) {
+  load_assets();
+  return tool_font;
 }
 
-static void draw_tool_button(float x, float y, const char* label, Texture2D tex, bool active_left, bool active_right) {
-  bool active = active_left || active_right;
-  Color bg = active ? (Color){ 50, 115, 210, 255 } : (Color){ 40, 40, 40, 220 };
-  DrawRectangle(x, y, BTN_W, ROW_H, bg);
+static void txt(float x, float y, const char* s, Color c) {
+  DrawTextEx(tool_font, s, (Vector2){ (int)x, (int)y }, FONT_SZ, 1, c);
+}
+
+static void draw_btn(float x, float y, float w, float h, const char* label, Texture2D tex, bool active) {
+  Color bg = active ? (Color){ 50, 115, 210, 255 } : (Color){ 38, 38, 38, 225 };
+  DrawRectangle((int)x, (int)y, (int)w, (int)h, bg);
+  DrawRectangleLines((int)x, (int)y, (int)w, (int)h, active ? (Color){ 100, 170, 255, 255 } : (Color){ 65, 65, 65, 220 });
+
   if (tex.id > 0) {
-    float ix = x + (BTN_W - ICON_SZ) / 2;
-    float iy = y + (ROW_H - ICON_SZ) / 2;
+    float ix = x + (w - ICON_SZ) / 2;
+    float iy = y + (h - ICON_SZ) / 2;
     DrawTexture(tex, (int)ix, (int)iy, WHITE);
   } else {
-    float tx = x + (BTN_W - MeasureTextEx(tool_font, label, FONT_SZ, 1).x) / 2;
-    float ty = y + (ROW_H - FONT_SZ) / 2;
-    txt(tx, ty, label, WHITE);
+    Vector2 sz = MeasureTextEx(tool_font, label, FONT_SZ, 1);
+    float tx = x + (w - sz.x) / 2;
+    float ty = y + (h - sz.y) / 2;
+    DrawTextEx(tool_font, label, (Vector2){ (int)tx, (int)ty }, FONT_SZ, 1, WHITE);
   }
 }
 
@@ -121,7 +125,7 @@ static void update_tooltip(const char* label, Rectangle btn_rect) {
   Vector2 m = GetMousePosition();
   bool hit = CheckCollisionPointRec(m, btn_rect);
   if (!hit) {
-    s_tip.hovering = false;
+    if (s_tip.hovering && s_tip.label == label) s_tip.hovering = false;
     return;
   }
   if (s_tip.hovering && s_tip.label == label) return;
@@ -133,7 +137,7 @@ static void update_tooltip(const char* label, Rectangle btn_rect) {
 
 static void draw_tooltip_if_hovering(void) {
   if (!s_tip.hovering) return;
-  if (GetTime() - s_tip.hover_start < 0.5) return;
+  if (GetTime() - s_tip.hover_start < 0.4) return;
 
   Font f = tool_font;
   Vector2 ms = MeasureTextEx(f, s_tip.label, FONT_SZ, 1);
@@ -142,8 +146,12 @@ static void draw_tooltip_if_hovering(void) {
   float tx = s_tip.rect.x + (s_tip.rect.width - tw) / 2;
   float ty = s_popup_pos.y + box_height() + 4;
 
-  DrawRectangle((int)tx, (int)ty, (int)tw, (int)th, (Color){ 30, 30, 30, 230 });
-  DrawRectangleLines((int)tx, (int)ty, (int)tw, (int)th, (Color){ 120, 120, 120, 255 });
+  float sw = (float)GetScreenWidth();
+  if (tx < 4) tx = 4;
+  if (tx + tw > sw - 4) tx = sw - 4 - tw;
+
+  DrawRectangle((int)tx, (int)ty, (int)tw, (int)th, (Color){ 25, 25, 25, 235 });
+  DrawRectangleLines((int)tx, (int)ty, (int)tw, (int)th, (Color){ 110, 110, 110, 255 });
   DrawTextEx(f, s_tip.label, (Vector2){ tx + 6, ty + 3 }, FONT_SZ, 1, WHITE);
 }
 
@@ -177,14 +185,14 @@ bool toolbox_is_mouse_over(void) {
 
 // ── slider / edit state ─────────────────────────────────────
 #define SLIDER_H   6
-#define THUMB_R    7
+#define THUMB_R    6
 
-static bool  s_dragging_slider = false;
-static bool  s_editing_size    = false;
-static char  s_edit_buf[8]    = { 0 };
-static int   s_edit_len        = 0;
-static double s_edit_start     = 0;
-static bool  s_dragging_zoom   = false;
+static bool   s_dragging_slider = false;
+static bool   s_editing_size    = false;
+static char   s_edit_buf[8]     = { 0 };
+static int    s_edit_len        = 0;
+static double s_edit_start      = 0;
+static bool   s_dragging_zoom   = false;
 
 static float zoom_to_slider(float z) {
   if (z <= 1.0F) {
@@ -275,14 +283,13 @@ void toolbox_handle_input(void) {
       s_editing_size = false;
     }
     if (!in_box && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-      // commit on click outside
       if (s_edit_len > 0) {
         float v = (float)atof(s_edit_buf);
         if (v > 0) { set_size(v); s_size_mult = size_to_mult(v); }
       }
       s_editing_size = false;
     }
-    return;  // consume all input while editing
+    return;
   }
 
   if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !g_tablet.pen_just_pressed && !s_dragging_slider && !s_dragging_zoom) return;
@@ -324,98 +331,110 @@ void toolbox_handle_input(void) {
 
   if (!in_box) return;
 
-  float xl = btn_x_left();
-  float xr = btn_x_right();
+  // Row 0: [Pen] [Eraser] [HL] [Line]
+  float r0 = row_y(0);
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r0, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_PEN; if (g_state->tool_pen_size > 10.0F) g_state->tool_pen_size = 10.0F; set_size(mult_to_size(s_size_mult)); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r0, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_ERASER; set_size(mult_to_size(s_size_mult)); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r0, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_HIGHLIGHTER; set_size(mult_to_size(s_size_mult)); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r0, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_LINE; return; }
 
-  // Row 0: [Pen] [Eraser]
-  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_PEN; if (g_state->tool_pen_size > 10.0F) g_state->tool_pen_size = 10.0F; set_size(mult_to_size(s_size_mult)); return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(0), BTN_W, ROW_H })) { g_state->current_tool = TOOL_ERASER; set_size(mult_to_size(s_size_mult)); return; }
+  // Row 1: [Arrow] [Triangle] [Rectangle] [Circle]
+  float r1 = row_y(1);
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r1, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_ARROW; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r1, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_TRIANGLE; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r1, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_RECTANGLE; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r1, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_CIRCLE; return; }
 
-  // Row 1: [Highlighter] [Black Board]
-  if (CheckCollisionPointRec(m, (Rectangle){ xl, row_y(1), BTN_W, ROW_H })) { g_state->current_tool = TOOL_HIGHLIGHTER; set_size(mult_to_size(s_size_mult)); return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ xr, row_y(1), BTN_W, ROW_H })) { g_state->black_board_enabled = !g_state->black_board_enabled; return; }
+  // Row 2: [Step Badge] [Text] [Table] [Blackboard]
+  float r2 = row_y(2);
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r2, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_STEP_BADGE; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r2, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_TEXT; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r2, COLS_4_W, ROW_H })) { g_state->current_tool = TOOL_TABLE; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r2, COLS_4_W, ROW_H })) { g_state->black_board_enabled = !g_state->black_board_enabled; return; }
 
-  // Row 2: Size label, editable value, slider
-  float cy2 = row_y(2);
+  // Row 3: Shape Settings [Solid] [Dashed] [Dotted] [Fill]
+  float r3 = row_y(3);
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_SOLID; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_DASHED; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_DOTTED; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r3, COLS_4_W, ROW_H })) { stroke_toggle_fill_last(); return; }
+
+  // Row 4: Size slider + editable value
+  float r4 = row_y(4);
   char szbuf[16];
   snprintf(szbuf, sizeof(szbuf), "%.1f", mult_to_size(s_size_mult));
   float val_w = MeasureTextEx(tool_font, szbuf, FONT_SZ, 1).x + 8;
   float val_x = s_popup_pos.x + BOX_W - BOX_PAD - val_w;
 
-  // Click on value → start editing
-  if (CheckCollisionPointRec(m, (Rectangle){ val_x, cy2, val_w, ROW_H })) {
+  if (CheckCollisionPointRec(m, (Rectangle){ val_x, r4, val_w, ROW_H })) {
     s_editing_size = true;
     s_edit_len     = snprintf(s_edit_buf, sizeof(s_edit_buf), "%.1f", mult_to_size(s_size_mult));
     s_edit_start   = GetTime();
     return;
   }
 
-  // Click/drag on slider
   float sl_x = s_popup_pos.x + BOX_PAD;
   float sl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
   if (sl_w < 20) sl_w = 20;
-  if (CheckCollisionPointRec(m, (Rectangle){ sl_x, cy2, sl_w, ROW_H })) {
+  if (CheckCollisionPointRec(m, (Rectangle){ sl_x, r4, sl_w, ROW_H })) {
     s_size_mult = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
     set_size(mult_to_size(s_size_mult));
     s_dragging_slider = true;
     return;
   }
 
-  // Row 3: Color cells + swap button
-  float cy3 = row_y(3);
-  float cc_w  = COLOR_SZ;
-  float sw_sz = 20;
-  float sw_gap = 6;
-  float cc_total = cc_w + sw_gap + sw_sz + sw_gap + cc_w;
-  float cc_x = s_popup_pos.x + (BOX_W - cc_total) / 2;
-  float c2_x = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
+  // Row 5: Colors + swap
+  float r5 = row_y(5);
+  float cc_w   = COLOR_SZ;
+  float sw_sz  = 24;
+  float sw_gap = 10;
+  float cc_tot = cc_w + sw_gap + sw_sz + sw_gap + cc_w;
+  float cc_x   = s_popup_pos.x + (BOX_W - cc_tot) / 2;
+  float c2_x   = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
+  float swap_x = cc_x + cc_w + sw_gap;
 
-  if (CheckCollisionPointRec(m, (Rectangle){ cc_x, cy3, cc_w, ROW_H })) {
+  if (CheckCollisionPointRec(m, (Rectangle){ cc_x, r5, cc_w, ROW_H })) {
     g_state->color1 = open_color_picker(g_state->color1);
     g_state->active_swatch = 0;
     g_configuration->draw_color = g_state->color1;
     return;
   }
-  float swap_x = cc_x + cc_w + sw_gap;
-  if (CheckCollisionPointRec(m, (Rectangle){ swap_x, cy3, sw_sz, ROW_H })) {
+  if (CheckCollisionPointRec(m, (Rectangle){ swap_x, r5, sw_sz, ROW_H })) {
     g_state->active_swatch = !g_state->active_swatch;
     g_configuration->draw_color = g_state->active_swatch ? g_state->color2 : g_state->color1;
     return;
   }
-  if (CheckCollisionPointRec(m, (Rectangle){ c2_x, cy3, cc_w, ROW_H })) {
+  if (CheckCollisionPointRec(m, (Rectangle){ c2_x, r5, cc_w, ROW_H })) {
     g_state->color2 = open_color_picker(g_state->color2);
     g_state->active_swatch = 1;
     g_configuration->draw_color = g_state->color2;
     return;
   }
 
-  // Row 4: Zoom slider
-  {
-    float cy4 = row_y(4);
-    char zbuf[16];
-    snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
-    float val_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
-
-    // Click on slider
-    float sl_x = s_popup_pos.x + BOX_PAD;
-    float sl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
-    if (sl_w < 20) sl_w = 20;
-    if (CheckCollisionPointRec(m, (Rectangle){ sl_x, cy4, sl_w, ROW_H })) {
-      float t = Clamp((m.x - sl_x) / sl_w, 0.0F, 1.0F);
-      float s = -1.0F + t * 2.0F;
-      g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
-      s_dragging_zoom = true;
-      return;
-    }
+  // Row 6: Zoom slider
+  float r6 = row_y(6);
+  char zbuf[16];
+  snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
+  float zval_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
+  float zsl_x  = s_popup_pos.x + BOX_PAD;
+  float zsl_w  = BOX_W - BOX_PAD * 2 - zval_w - 4;
+  if (zsl_w < 20) zsl_w = 20;
+  if (CheckCollisionPointRec(m, (Rectangle){ zsl_x, r6, zsl_w, ROW_H })) {
+    float t = Clamp((m.x - zsl_x) / zsl_w, 0.0F, 1.0F);
+    float s = -1.0F + t * 2.0F;
+    g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
+    s_dragging_zoom = true;
+    return;
   }
 
-  // Row 5: [Clear] [Fit]
-  float cy5 = row_y(5);
-  if (CheckCollisionPointRec(m, (Rectangle){ xl, cy5, BTN_W, ROW_H })) {
+  // Row 7: [Clear] [Fit]
+  float r7 = row_y(7);
+  float half_w = (BOX_W - BOX_PAD * 2 - GAP_4) / 2;
+  if (CheckCollisionPointRec(m, (Rectangle){ s_popup_pos.x + BOX_PAD, r7, half_w, ROW_H })) {
     draw_clear_current();
     return;
   }
-  if (CheckCollisionPointRec(m, (Rectangle){ xr, cy5, BTN_W, ROW_H })) {
+  if (CheckCollisionPointRec(m, (Rectangle){ s_popup_pos.x + BOX_PAD + half_w + GAP_4, r7, half_w, ROW_H })) {
     if (g_state->image_w > 0 && g_state->image_h > 0) {
       float fw = (float)GetScreenWidth();
       float fh = (float)GetScreenHeight();
@@ -440,158 +459,152 @@ void toolbox_render(void) {
   float by = s_popup_pos.y;
   float bh = box_height();
 
-  DrawRectangle(bx, by, BOX_W, bh, (Color){ 20, 20, 20, 220 });
-  DrawRectangleLines(bx, by, BOX_W, bh, (Color){ 60, 60, 60, 255 });
+  DrawRectangle((int)bx, (int)by, BOX_W, (int)bh, (Color){ 20, 20, 20, 230 });
+  DrawRectangleLines((int)bx, (int)by, BOX_W, (int)bh, (Color){ 65, 65, 65, 255 });
 
-  float xl = btn_x_left();
-  float xr = btn_x_right();
   ToolType cur = g_state->current_tool;
 
-  // Row 0: [Pen] [Eraser]
-  draw_tool_button(xl, row_y(0), "Pen", pen_tex, cur == TOOL_PEN, false);
-  update_tooltip("Pen (1)", (Rectangle){ xl, row_y(0), BTN_W, ROW_H });
-  draw_tool_button(xr, row_y(0), "Eraser", eras_tex, cur == TOOL_ERASER, false);
-  update_tooltip("Eraser (2)", (Rectangle){ xr, row_y(0), BTN_W, ROW_H });
+  // Row 0: [Pen] [Eraser] [HL] [Line]
+  float r0 = row_y(0);
+  draw_btn(col_x(0), r0, COLS_4_W, ROW_H, "Pen", pen_tex, cur == TOOL_PEN);
+  update_tooltip("Pen (1)", (Rectangle){ col_x(0), r0, COLS_4_W, ROW_H });
 
-  // Row 1: [Highlighter] [Black Board]
-  draw_tool_button(xl, row_y(1), "Highlight", hl_tex, cur == TOOL_HIGHLIGHTER, false);
-  update_tooltip("Highlighter (3)", (Rectangle){ xl, row_y(1), BTN_W, ROW_H });
-  draw_tool_button(xr, row_y(1), "Board", (Texture2D){ 0 }, g_state->black_board_enabled, false);
-  update_tooltip("Black Board (B)", (Rectangle){ xr, row_y(1), BTN_W, ROW_H });
+  draw_btn(col_x(1), r0, COLS_4_W, ROW_H, "Eras", eras_tex, cur == TOOL_ERASER);
+  update_tooltip("Eraser (2)", (Rectangle){ col_x(1), r0, COLS_4_W, ROW_H });
 
-  // Row 2: Size label + slider + editable value
-  float cy2 = row_y(2);
-  float sz   = mult_to_size(s_size_mult);
+  draw_btn(col_x(2), r0, COLS_4_W, ROW_H, "HL", hl_tex, cur == TOOL_HIGHLIGHTER);
+  update_tooltip("Highlighter (Shift+1)", (Rectangle){ col_x(2), r0, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(3), r0, COLS_4_W, ROW_H, "/", (Texture2D){ 0 }, cur == TOOL_LINE);
+  update_tooltip("Straight Line (3)", (Rectangle){ col_x(3), r0, COLS_4_W, ROW_H });
+
+  // Row 1: [Arrow] [Triangle] [Rectangle] [Circle]
+  float r1 = row_y(1);
+  draw_btn(col_x(0), r1, COLS_4_W, ROW_H, "->", (Texture2D){ 0 }, cur == TOOL_ARROW);
+  update_tooltip("Arrow (4)", (Rectangle){ col_x(0), r1, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(1), r1, COLS_4_W, ROW_H, "/\\", (Texture2D){ 0 }, cur == TOOL_TRIANGLE);
+  update_tooltip("Triangle (5)", (Rectangle){ col_x(1), r1, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(2), r1, COLS_4_W, ROW_H, "[]", (Texture2D){ 0 }, cur == TOOL_RECTANGLE);
+  update_tooltip("Rectangle (6)", (Rectangle){ col_x(2), r1, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(3), r1, COLS_4_W, ROW_H, "()", (Texture2D){ 0 }, cur == TOOL_CIRCLE);
+  update_tooltip("Circle (7)", (Rectangle){ col_x(3), r1, COLS_4_W, ROW_H });
+
+  // Row 2: [Step Badge] [Text] [Table] [Board]
+  float r2 = row_y(2);
+  draw_btn(col_x(0), r2, COLS_4_W, ROW_H, "(1)", (Texture2D){ 0 }, cur == TOOL_STEP_BADGE);
+  update_tooltip("Step Badge (8) [- to pop]", (Rectangle){ col_x(0), r2, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(1), r2, COLS_4_W, ROW_H, "Txt", (Texture2D){ 0 }, cur == TOOL_TEXT);
+  update_tooltip("Text Tool (9)", (Rectangle){ col_x(1), r2, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(2), r2, COLS_4_W, ROW_H, "#", (Texture2D){ 0 }, cur == TOOL_TABLE);
+  update_tooltip("Table Tool (0) [Arrows resize]", (Rectangle){ col_x(2), r2, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(3), r2, COLS_4_W, ROW_H, "Brd", (Texture2D){ 0 }, g_state->black_board_enabled);
+  update_tooltip("Blackboard (B)", (Rectangle){ col_x(3), r2, COLS_4_W, ROW_H });
+
+  // Row 3: Shape Settings [Solid] [Dashed] [Dotted] [Fill]
+  float r3 = row_y(3);
+  draw_btn(col_x(0), r3, COLS_4_W, ROW_H, "Solid", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_SOLID);
+  update_tooltip("Solid Stroke", (Rectangle){ col_x(0), r3, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(1), r3, COLS_4_W, ROW_H, "Dash", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_DASHED);
+  update_tooltip("Dashed Stroke (Shift+Num / [ ])", (Rectangle){ col_x(1), r3, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(2), r3, COLS_4_W, ROW_H, "Dots", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_DOTTED);
+  update_tooltip("Dotted Stroke", (Rectangle){ col_x(2), r3, COLS_4_W, ROW_H });
+
+  draw_btn(col_x(3), r3, COLS_4_W, ROW_H, g_state->shape_filled ? "Fill*" : "Fill", (Texture2D){ 0 }, g_state->shape_filled);
+  update_tooltip("Fill Mode (Ctrl+F)", (Rectangle){ col_x(3), r3, COLS_4_W, ROW_H });
+
+  // Row 4: Size label + slider + editable value
+  float r4 = row_y(4);
+  float sz  = mult_to_size(s_size_mult);
   char szbuf[16];
   snprintf(szbuf, sizeof(szbuf), "%.1f", sz);
   const char* val_str = s_editing_size ? s_edit_buf : szbuf;
   Color val_col = s_editing_size ? (Color){ 255, 255, 100, 255 } : WHITE;
   float val_w = MeasureTextEx(tool_font, val_str, FONT_SZ, 1).x + 8;
   float val_x = s_popup_pos.x + BOX_W - BOX_PAD - val_w;
-  float val_y = cy2 + (ROW_H - FONT_SZ) / 2;
+  float val_y = r4 + (ROW_H - FONT_SZ) / 2;
 
-  // Label at top
-  float lbl_y = cy2 + 2;
-  txt(s_popup_pos.x + BOX_PAD, lbl_y, "Size", (Color){ 180, 180, 180, 255 });
+  txt(s_popup_pos.x + BOX_PAD, r4 + 2, "Size", (Color){ 170, 170, 170, 255 });
 
-  // Slider track
   float sl_x = s_popup_pos.x + BOX_PAD;
   float sl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
   if (sl_w < 20) sl_w = 20;
-  float track_y = cy2 + ROW_H - SLIDER_H - 4;
-  DrawRectangle(sl_x, track_y, sl_w, SLIDER_H, (Color){ 60, 60, 60, 255 });
+  float track_y = r4 + ROW_H - SLIDER_H - 4;
+  DrawRectangle((int)sl_x, (int)track_y, (int)sl_w, SLIDER_H, (Color){ 55, 55, 55, 255 });
   if (s_size_mult > 0)
-    DrawRectangle(sl_x, track_y, (int)(s_size_mult * sl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
+    DrawRectangle((int)sl_x, (int)track_y, (int)(s_size_mult * sl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
 
-  // Thumb
   float thumb_x = sl_x + s_size_mult * sl_w;
-  DrawCircleV((Vector2){ thumb_x, track_y + SLIDER_H / 2.0F }, THUMB_R, (Color){ 200, 200, 200, 255 });
-  DrawCircleV((Vector2){ thumb_x, track_y + SLIDER_H / 2.0F }, THUMB_R - 2, (Color){ 240, 240, 240, 255 });
+  DrawCircleV((Vector2){ thumb_x, track_y + SLIDER_H / 2.0F }, THUMB_R, (Color){ 210, 210, 210, 255 });
 
-  // Value text at right edge
   txt(val_x, val_y, val_str, val_col);
-
-  // Cursor blink when editing
   if (s_editing_size && fmod(GetTime() - s_edit_start, 1.0) < 0.5) {
-    float cur_x = val_x + MeasureTextEx(tool_font, val_str, FONT_SZ, 1).x;
-    DrawRectangle((int)cur_x, (int)(cy2 + 6), 2, (int)(ROW_H - 12), (Color){ 255, 255, 100, 255 });
+    float cur_x = val_x + MeasureTextEx(tool_font, s_edit_buf, FONT_SZ, 1).x;
+    DrawRectangle((int)cur_x, (int)val_y, 2, FONT_SZ, val_col);
   }
+  update_tooltip("Size (+ / -)", (Rectangle){ sl_x, r4, sl_w, ROW_H });
 
-  update_tooltip("Drag to adjust size", (Rectangle){ sl_x, cy2, sl_w, ROW_H });
-
-  // Row 3: Color cells + swap button
-  float cy3 = row_y(3);
-  float cc_w  = COLOR_SZ;
-  float sw_sz = 20;
-  float sw_gap = 6;
-  float cc_total = cc_w + sw_gap + sw_sz + sw_gap + cc_w;
-  float cc_x = s_popup_pos.x + (BOX_W - cc_total) / 2;
-  float cc_y_off = cy3 + (ROW_H - cc_w) / 2;
-
-  DrawRectangle(cc_x, cc_y_off, cc_w, cc_w, g_state->color1);
-  Color c1_border = g_state->active_swatch == 0 ? WHITE : (Color){ 80, 80, 80, 255 };
-  DrawRectangleLines(cc_x, cc_y_off, cc_w, cc_w, c1_border);
-  if (g_state->active_swatch == 0 && pen_tex.id > 0) {
-    Color neg = { (unsigned char)(255 - g_state->color1.r),
-                  (unsigned char)(255 - g_state->color1.g),
-                  (unsigned char)(255 - g_state->color1.b), 200 };
-    float ps = 18.0F;
-    DrawTextureEx(pen_tex, (Vector2){ cc_x + 2, cc_y_off + cc_w - ps - 2 }, 0, ps / ICON_SZ, neg);
-  }
-  update_tooltip(g_state->active_swatch == 0 ? "Color 1 (active)" : "Color 1", (Rectangle){ cc_x, cy3, cc_w, ROW_H });
-
+  // Row 5: Colors + swap
+  float r5 = row_y(5);
+  float cc_w   = COLOR_SZ;
+  float sw_sz  = 24;
+  float sw_gap = 10;
+  float cc_tot = cc_w + sw_gap + sw_sz + sw_gap + cc_w;
+  float cc_x   = s_popup_pos.x + (BOX_W - cc_tot) / 2;
+  float c2_x   = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
   float swap_x = cc_x + cc_w + sw_gap;
-  float swap_y = cy3 + (ROW_H - sw_sz) / 2;
-  Color sw_bg = CheckCollisionPointRec(GetMousePosition(), (Rectangle){ swap_x, cy3, sw_sz, ROW_H }) ? (Color){ 70, 70, 70, 255 } : (Color){ 40, 40, 40, 220 };
-  DrawRectangle((int)swap_x, (int)swap_y, (int)sw_sz, (int)sw_sz, sw_bg);
-  DrawRectangleLines((int)swap_x, (int)swap_y, (int)sw_sz, (int)sw_sz, (Color){ 80, 80, 80, 255 });
-  // swap arrows
-  float cx = swap_x + sw_sz / 2;
-  float cy = swap_y + sw_sz / 2;
-  Color ac = (Color){ 200, 200, 200, 255 };
-  DrawLineV((Vector2){ cx - 4, cy - 3 }, (Vector2){ cx + 4, cy - 3 }, ac);
-  DrawLineV((Vector2){ cx + 2, cy - 5 }, (Vector2){ cx + 4, cy - 3 }, ac);
-  DrawLineV((Vector2){ cx + 2, cy - 1 }, (Vector2){ cx + 4, cy - 3 }, ac);
-  DrawLineV((Vector2){ cx + 4, cy + 3 }, (Vector2){ cx - 4, cy + 3 }, ac);
-  DrawLineV((Vector2){ cx - 2, cy + 1 }, (Vector2){ cx - 4, cy + 3 }, ac);
-  DrawLineV((Vector2){ cx - 2, cy + 5 }, (Vector2){ cx - 4, cy + 3 }, ac);
-  update_tooltip("Use color 2", (Rectangle){ swap_x, cy3, sw_sz, ROW_H });
 
-  float c2x = cc_x + cc_w + sw_gap + sw_sz + sw_gap;
-  DrawRectangle(c2x, cc_y_off, cc_w, cc_w, g_state->color2);
-  Color c2_border = g_state->active_swatch == 1 ? WHITE : (Color){ 80, 80, 80, 255 };
-  DrawRectangleLines(c2x, cc_y_off, cc_w, cc_w, c2_border);
-  if (g_state->active_swatch == 1 && pen_tex.id > 0) {
-    Color neg = { (unsigned char)(255 - g_state->color2.r),
-                  (unsigned char)(255 - g_state->color2.g),
-                  (unsigned char)(255 - g_state->color2.b), 200 };
-    float ps = 18.0F;
-    DrawTextureEx(pen_tex, (Vector2){ c2x + 2, cc_y_off + cc_w - ps - 2 }, 0, ps / ICON_SZ, neg);
-  }
-  update_tooltip(g_state->active_swatch == 1 ? "Color 2 (active)" : "Color 2", (Rectangle){ c2x, cy3, cc_w, ROW_H });
+  DrawRectangle((int)cc_x, (int)r5, (int)cc_w, ROW_H, g_state->color1);
+  DrawRectangleLines((int)cc_x, (int)r5, (int)cc_w, ROW_H, (g_state->active_swatch == 0) ? (Color){ 100, 170, 255, 255 } : (Color){ 65, 65, 65, 220 });
+  update_tooltip("Color 1 (click to pick)", (Rectangle){ cc_x, r5, cc_w, ROW_H });
 
-  // Row 4: Zoom slider
-  {
-    float cy4 = row_y(4);
+  draw_btn(swap_x, r5, sw_sz, ROW_H, "<>", (Texture2D){ 0 }, false);
+  update_tooltip("Swap Colors (X)", (Rectangle){ swap_x, r5, sw_sz, ROW_H });
 
-    // Label at top
-    float lbl_y4 = cy4 + 2;
-    txt(s_popup_pos.x + BOX_PAD, lbl_y4, "Zoom", (Color){ 180, 180, 180, 255 });
+  DrawRectangle((int)c2_x, (int)r5, (int)cc_w, ROW_H, g_state->color2);
+  DrawRectangleLines((int)c2_x, (int)r5, (int)cc_w, ROW_H, (g_state->active_swatch == 1) ? (Color){ 100, 170, 255, 255 } : (Color){ 65, 65, 65, 220 });
+  update_tooltip("Color 2 (click to pick)", (Rectangle){ c2_x, r5, cc_w, ROW_H });
 
-    char zbuf[16];
-    snprintf(zbuf, sizeof(zbuf), "%.1f", g_state->zoom);
-    float val_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
-    float val_x = s_popup_pos.x + BOX_W - BOX_PAD - val_w;
-    float val_y4 = cy4 + (ROW_H - FONT_SZ) / 2;
+  // Row 6: Zoom slider
+  float r6 = row_y(6);
+  char zbuf[16];
+  snprintf(zbuf, sizeof(zbuf), "%.1fx", g_state->zoom);
+  float zval_w = MeasureTextEx(tool_font, zbuf, FONT_SZ, 1).x + 8;
+  float zval_x = s_popup_pos.x + BOX_W - BOX_PAD - zval_w;
+  float zval_y = r6 + (ROW_H - FONT_SZ) / 2;
 
-    // Slider
-    float zsl_x = s_popup_pos.x + BOX_PAD;
-    float zsl_w = BOX_W - BOX_PAD * 2 - val_w - 4;
-    if (zsl_w < 20) zsl_w = 20;
-    float track_y4 = cy4 + ROW_H - SLIDER_H - 4;
-    DrawRectangle(zsl_x, track_y4, zsl_w, SLIDER_H, (Color){ 60, 60, 60, 255 });
+  txt(s_popup_pos.x + BOX_PAD, r6 + 2, "Zoom", (Color){ 170, 170, 170, 255 });
 
-    float zt = (zoom_to_slider(g_state->zoom) + 1.0F) / 2.0F;
-    zt = Clamp(zt, 0.0F, 1.0F);
-    if (zt > 0)
-      DrawRectangle(zsl_x, track_y4, (int)(zt * zsl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
+  float zsl_x = s_popup_pos.x + BOX_PAD;
+  float zsl_w = BOX_W - BOX_PAD * 2 - zval_w - 4;
+  if (zsl_w < 20) zsl_w = 20;
+  float ztrack_y = r6 + ROW_H - SLIDER_H - 4;
+  DrawRectangle((int)zsl_x, (int)ztrack_y, (int)zsl_w, SLIDER_H, (Color){ 55, 55, 55, 255 });
 
-    float zthumb_x = zsl_x + zt * zsl_w;
-    DrawCircleV((Vector2){ zthumb_x, track_y4 + SLIDER_H / 2.0F }, THUMB_R, (Color){ 200, 200, 200, 255 });
-    DrawCircleV((Vector2){ zthumb_x, track_y4 + SLIDER_H / 2.0F }, THUMB_R - 2, (Color){ 240, 240, 240, 255 });
+  float zt = Clamp((zoom_to_slider(g_state->zoom) + 1.0F) / 2.0F, 0.0F, 1.0F);
+  if (zt > 0)
+    DrawRectangle((int)zsl_x, (int)ztrack_y, (int)(zt * zsl_w), SLIDER_H, (Color){ 80, 140, 220, 255 });
 
-    // Value text at right edge
-    txt(val_x, val_y4, zbuf, WHITE);
+  float zthumb_x = zsl_x + zt * zsl_w;
+  DrawCircleV((Vector2){ zthumb_x, ztrack_y + SLIDER_H / 2.0F }, THUMB_R, (Color){ 210, 210, 210, 255 });
+  txt(zval_x, zval_y, zbuf, WHITE);
+  update_tooltip("Zoom (wheel / drag)", (Rectangle){ zsl_x, r6, zsl_w, ROW_H });
 
-    update_tooltip("Zoom (drag to adjust)", (Rectangle){ zsl_x, cy4, zsl_w, ROW_H });
-  }
+  // Row 7: [Clear] [Fit]
+  float r7 = row_y(7);
+  float half_w = (BOX_W - BOX_PAD * 2 - GAP_4) / 2;
+  draw_btn(s_popup_pos.x + BOX_PAD, r7, half_w, ROW_H, "Clear", trash_tex, false);
+  update_tooltip("Clear current annotations", (Rectangle){ s_popup_pos.x + BOX_PAD, r7, half_w, ROW_H });
 
-  // Row 5: [Clear] [Fit]
-  float cy5 = row_y(5);
-  draw_tool_button(xl, cy5, "Clear", trash_tex, false, false);
-  update_tooltip("Clear strokes (active layer)", (Rectangle){ xl, cy5, BTN_W, ROW_H });
-  draw_tool_button(xr, cy5, "Fit", fit_tex, false, false);
-  update_tooltip("Fit image to screen", (Rectangle){ xr, cy5, BTN_W, ROW_H });
+  draw_btn(s_popup_pos.x + BOX_PAD + half_w + GAP_4, r7, half_w, ROW_H, "Fit", fit_tex, false);
+  update_tooltip("Fit to screen (A)", (Rectangle){ s_popup_pos.x + BOX_PAD + half_w + GAP_4, r7, half_w, ROW_H });
 
   draw_tooltip_if_hovering();
 }
@@ -604,40 +617,48 @@ void keymaps_render(void) {
   int sw = GetScreenWidth();
   int sh = GetScreenHeight();
 
-  float pw = 440.0f;
-  float ph = 380.0f;
+  float pw = 520.0f;
+  float ph = 430.0f;
   float px = (sw - pw) / 2.0f;
-  float py = (sh - ph) / 2.0f - 20.0f;
+  float py = (sh - ph) / 2.0f - 10.0f;
 
-  DrawRectangle((int)px, (int)py, (int)pw, (int)ph, (Color){ 20, 20, 20, 230 });
-  DrawRectangleLines((int)px, (int)py, (int)pw, (int)ph, (Color){ 60, 60, 60, 255 });
+  DrawRectangle((int)px, (int)py, (int)pw, (int)ph, (Color){ 20, 20, 20, 235 });
+  DrawRectangleLines((int)px, (int)py, (int)pw, (int)ph, (Color){ 65, 65, 65, 255 });
 
-  int fs = 20;
+  int fs = 18;
   int ly = (int)py + 16;
   int gap = 24;
-  int lx1 = (int)px + 28;
-  int lx2 = (int)px + 240;
+  int lx1 = (int)px + 24;
+  int lx2 = (int)px + 270;
 
-  DrawText("Keybindings", lx1, ly, 22, (Color){ 200, 200, 200, 255 });
-  ly += gap + 8;
+  DrawText("Roomer Keybindings", lx1, ly, 22, (Color){ 210, 210, 210, 255 });
+  ly += gap + 10;
 
-  DrawText("1   Pen",             lx1, ly, fs, WHITE);
-  DrawText("2   Eraser",          lx1, ly + gap, fs, WHITE);
-  DrawText("3   Highlighter",     lx1, ly + gap * 2, fs, WHITE);
-  DrawText("C   Toolbox",         lx1, ly + gap * 3, fs, WHITE);
-  DrawText("0   Reset view",      lx1, ly + gap * 4, fs, WHITE);
+  DrawText("1       Pen",                   lx1, ly, fs, WHITE);
+  DrawText("Shift+1 Highlighter",           lx1, ly + gap, fs, WHITE);
+  DrawText("2       Eraser",                lx1, ly + gap * 2, fs, WHITE);
+  DrawText("3       Straight Line",         lx1, ly + gap * 3, fs, WHITE);
+  DrawText("4       Arrow",                 lx1, ly + gap * 4, fs, WHITE);
+  DrawText("5       Triangle",              lx1, ly + gap * 5, fs, WHITE);
+  DrawText("6       Rectangle",             lx1, ly + gap * 6, fs, WHITE);
+  DrawText("7       Circle",                lx1, ly + gap * 7, fs, WHITE);
+  DrawText("8       Step Badge",            lx1, ly + gap * 8, fs, WHITE);
+  DrawText("9       Text Tool",             lx1, ly + gap * 9, fs, WHITE);
+  DrawText("0       Table Tool",            lx1, ly + gap * 10, fs, WHITE);
 
-  DrawText("B   Blackboard",      lx2, ly, fs, WHITE);
-  DrawText("F   Flashlight",      lx2, ly + gap, fs, WHITE);
-  DrawText("X   Swap color",      lx2, ly + gap * 2, fs, WHITE);
-  DrawText("H   Keymaps",         lx2, ly + gap * 3, fs, WHITE);
-  DrawText("A   Fit to screen",   lx2, ly + gap * 4, fs, WHITE);
+  DrawText("Ctrl+F    Toggle Fill",         lx2, ly, fs, WHITE);
+  DrawText("Shift+3-7 Cycle Solid/Dash/Dot",lx2, ly + gap, fs, WHITE);
+  DrawText("[ / ]     Dash Spacing",        lx2, ly + gap * 2, fs, WHITE);
+  DrawText("-         Pop Step Badge",      lx2, ly + gap * 3, fs, WHITE);
+  DrawText("Arrows    Table Rows/Cols",     lx2, ly + gap * 4, fs, WHITE);
+  DrawText("+ / -     Brush / Eraser Size", lx2, ly + gap * 5, fs, WHITE);
+  DrawText("X         Swap Colors",         lx2, ly + gap * 6, fs, WHITE);
+  DrawText("B         Blackboard",          lx2, ly + gap * 7, fs, WHITE);
+  DrawText("C         Toolbox",             lx2, ly + gap * 8, fs, WHITE);
+  DrawText("F         Flashlight",          lx2, ly + gap * 9, fs, WHITE);
+  DrawText("A         Fit to Screen",       lx2, ly + gap * 10, fs, WHITE);
 
-  ly += gap * 5 + 8;
+  ly += gap * 11 + 10;
 
-  DrawText("Mouse Wheel     Zoom",       lx1, ly, fs, WHITE);
-  DrawText("Shift+Wheel     Fine zoom",  lx1, ly + gap, fs, WHITE);
-  DrawText("Left drag       Pan",        lx1, ly + gap * 2, fs, WHITE);
-  DrawText("Right drag      Draw",       lx1, ly + gap * 3, fs, WHITE);
-  DrawText("Esc / Q         Quit",       lx1, ly + gap * 4, fs, WHITE);
+  DrawText("Right Drag / Pen: Draw   |   Left Drag: Pan   |   Wheel: Zoom   |   Esc/Q: Close", lx1, ly, 15, (Color){ 170, 170, 170, 255 });
 }
