@@ -1,7 +1,5 @@
 #include "roomer.h"
 
-static const char* detect_image_extension(const unsigned char* data, size_t length);
-
 Image load_image_from_stdin(bool* out_was_file) {
   struct stat    st       = { 0 };
   unsigned char* buffer   = NULL;
@@ -86,7 +84,7 @@ on_error:
   return (Image){ 0 };
 }
 
-static const char* detect_image_extension(const unsigned char* data, size_t length) {
+const char* detect_image_extension(const unsigned char* data, size_t length) {
   if (length >= 8 && !memcmp(data, "\211PNG\r\n\032\n", 8)) return ".png";
   if (length >= 2 && !memcmp(data, "\xFF\xD8", 2)) return ".jpg";
   if (length >= 4 && !memcmp(data, "WEBP", 4)) return ".webp";

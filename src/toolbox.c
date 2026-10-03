@@ -205,21 +205,26 @@ static float slider_to_zoom(float s) {
 }
 
 static float slider_min(void) {
-  return (g_state->current_tool == TOOL_HIGHLIGHTER) ? 10.0F : 0.5F;
+  if (g_state->current_tool == TOOL_HIGHLIGHTER) return 10.0F;
+  if (g_state->current_tool == TOOL_ERASER) return 5.0F;
+  return 0.5F;
 }
 
 static float slider_max(void) {
   if (g_state->current_tool == TOOL_PEN) return 10.0F;
-  return 45.0F;
+  return 60.0F;
 }
 
 static float current_size(void) {
-  return (g_state->current_tool == TOOL_ERASER) ? g_state->tool_eraser_size : g_state->tool_pen_size;
+  if (g_state->current_tool == TOOL_ERASER) return g_state->tool_eraser_size;
+  if (g_state->current_tool == TOOL_HIGHLIGHTER) return g_state->tool_highlighter_size;
+  return g_state->tool_pen_size;
 }
 
 static void set_size(float v) {
   v = Clamp(v, slider_min(), slider_max());
   if (g_state->current_tool == TOOL_ERASER) g_state->tool_eraser_size = v;
+  else if (g_state->current_tool == TOOL_HIGHLIGHTER) g_state->tool_highlighter_size = v;
   else g_state->tool_pen_size = v;
 }
 
@@ -407,8 +412,7 @@ void toolbox_handle_input(void) {
   // Row 5: [Clear] [Fit]
   float cy5 = row_y(5);
   if (CheckCollisionPointRec(m, (Rectangle){ xl, cy5, BTN_W, ROW_H })) {
-    if (g_state->black_board_enabled) { bb_lines_clear(); bb_hl_clear(); }
-    else { lines_clear(); hl_clear(); }
+    draw_clear_current();
     return;
   }
   if (CheckCollisionPointRec(m, (Rectangle){ xr, cy5, BTN_W, ROW_H })) {

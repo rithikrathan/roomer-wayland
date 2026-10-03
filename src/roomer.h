@@ -24,7 +24,35 @@ typedef enum {
   TOOL_PEN,
   TOOL_ERASER,
   TOOL_HIGHLIGHTER,
+  TOOL_LINE,
+  TOOL_RECTANGLE,
+  TOOL_CIRCLE,
+  TOOL_ARROW,
 } ToolType;
+
+typedef enum {
+  LAYER_IMAGE = 0,
+  LAYER_BLACKBOARD = 1,
+  LAYER_COUNT = 2,
+} DrawLayer;
+
+typedef enum {
+  SHAPE_FREEHAND,
+  SHAPE_LINE,
+  SHAPE_RECTANGLE,
+  SHAPE_CIRCLE,
+  SHAPE_ARROW,
+} ShapeType;
+
+typedef struct {
+  ShapeType type;
+  ToolType  tool;
+  Vector2*  points;
+  int       points_count;
+  int       points_capacity;
+  float     thickness;
+  Color     color;
+} Stroke;
 
 typedef struct {
   Vector2 pan;
@@ -44,6 +72,7 @@ typedef struct {
   ToolType current_tool;
   float   tool_pen_size;
   float   tool_eraser_size;
+  float   tool_highlighter_size;
   Color   color1;
   Color   color2;
   int     active_swatch;
@@ -73,6 +102,9 @@ typedef struct {
   Color draw_color;
   float draw_thickness;
   bool  transparent_background;
+  bool  daemon_mode;
+  bool  quit_daemon;
+  bool  no_daemon;
 } Configuration;
 
 extern Configuration g_default_configuration;
@@ -85,9 +117,28 @@ extern State*         g_state;
 void process_commandline_arguments(int argc, char** argv);
 
 Image load_image_from_stdin(bool* out_was_file);
+const char* detect_image_extension(const unsigned char* data, size_t length);
 
 void handle_inputs(void);
 void handle_draw(void);
+Vector2 get_cursor_screen_pos(void);
+extern const char* g_flashlight_frag_shader_source;
+void app_render_frame(Texture2D img_texture, Shader flashlight_shader, int loc_center, int loc_radius, int loc_darkness, int loc_texture);
+
+// Unified Drawing System
+void draw_layer_normal(DrawLayer layer);
+void draw_render_highlighter(DrawLayer layer, bool view_changed);
+void draw_composite_highlighter(void);
+void draw_dot_grid(int sw, int sh, Vector2 pan, float zoom);
+bool draw_is_dirty(DrawLayer layer);
+void draw_clear_dirty(DrawLayer layer);
+void draw_clear_layer(DrawLayer layer);
+void draw_clear_current(void);
+void draw_clear_all(void);
+void draw_cleanup(void);
+void draw_free_all_memory(void);
+
+// Compatibility wrappers
 void lines_draw(void);
 bool is_lines_dirty(void);
 bool is_bb_lines_dirty(void);

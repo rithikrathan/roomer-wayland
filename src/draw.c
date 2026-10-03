@@ -1,55 +1,55 @@
 #include "roomer.h"
 
+// ── Types and State ─────────────────────────────────────────
+
 typedef struct {
-  Vector2* points;
-  float    thickness;
-  int      points_count;
-  int      points_capacity;
-  Color    color;
-} Line;
+  Stroke* strokes;
+  int     count;
+  int     capacity;
+  bool    dirty;
+  bool    hl_dirty;
+} StrokeLayer;
 
-static Line* lines          = NULL;
-static int   lines_count    = 0;
-static int   lines_capacity = 0;
+static StrokeLayer s_layers[LAYER_COUNT] = { 0 };
 
-static Line* bb_lines          = NULL;
-static int   bb_lines_count    = 0;
-static int   bb_lines_capacity = 0;
+static Stroke* s_active_stroke = NULL;
+static Vector2 s_last_pos      = { 0 };
+static bool    s_has_last_pos  = false;
 
-static Line* hl_lines          = NULL;
-static int   hl_lines_count    = 0;
-static int   hl_lines_capacity = 0;
+static RenderTexture2D s_hl_rt   = { 0 };
+static int             s_hl_rt_w = 0;
+static int             s_hl_rt_h = 0;
 
-static Line* bb_hl_lines          = NULL;
-static int   bb_hl_lines_count    = 0;
-static int   bb_hl_lines_capacity = 0;
-
-static void    bb_line_begin(void);
-static void    bb_line_add_point(Vector2 texture_pos);
-static void    hl_line_begin(void);
-static void    hl_line_add_point(Vector2 texture_pos);
-
-static void    line_begin(void);
-static void    line_add_point(Vector2 texture_pos);
-static Vector2 to_texture_coords(Vector2 screen_pos);
-static Vector2 to_screen_coords(Vector2 texture_pos);
-static float   dist_to_segment(Vector2 p, Vector2 a, Vector2 b);
-
-static bool s_lines_dirty    = true;
-static bool s_bb_lines_dirty = true;
-
-bool is_lines_dirty(void)    { return s_lines_dirty; }
-bool is_bb_lines_dirty(void) { return s_bb_lines_dirty; }
-void clear_lines_dirty(void)    { s_lines_dirty = false; }
-void clear_bb_lines_dirty(void) { s_bb_lines_dirty = false; }
-
-static Vector2 pen_screen_pos(void) {
-  if (g_tablet.abs_x_max == 0 || g_tablet.abs_y_max == 0)
-    return GetMousePosition();
-  float sx = (float)g_tablet.abs_x / (float)g_tablet.abs_x_max * GetScreenWidth();
-  float sy = (float)g_tablet.abs_y / (float)g_tablet.abs_y_max * GetScreenHeight();
-  return (Vector2){ sx, sy };
+static inline StrokeLayer* get_layer(DrawLayer layer) {
+  int idx = (int)layer;
+  if (idx < 0 || idx >= LAYER_COUNT) idx = 0;
+  return &s_layers[idx];
 }
+
+static inline StrokeLayer* get_active_layer(void) {
+  return get_layer(g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE);
+}
+
+static inline Vector2 to_texture_coords(Vector2 screen_pos) {
+  return Vector2Scale(Vector2Subtract(screen_pos, g_state->pan), 1.0F / g_state->zoom);
+}
+
+static inline Vector2 to_screen_coords(Vector2 texture_pos) {
+  return Vector2Add(Vector2Scale(texture_pos, g_state->zoom), g_state->pan);
+}
+
+// ── Cursor / Pen position helper ────────────────────────────
+
+Vector2 get_cursor_screen_pos(void) {
+  if (g_tablet.present && (g_tablet.logical_pen_down || g_tablet.active) && g_tablet.abs_x_max > 0 && g_tablet.abs_y_max > 0) {
+    float sx = (float)g_tablet.abs_x / (float)g_tablet.abs_x_max * (float)GetScreenWidth();
+    float sy = (float)g_tablet.abs_y / (float)g_tablet.abs_y_max * (float)GetScreenHeight();
+    return (Vector2){ sx, sy };
+  }
+  return GetMousePosition();
+}
+
+// ── Color Picker (yad) ──────────────────────────────────────
 
 static Color parse_yad_color(const char* str, Color fallback) {
   if (str[0] != '#') return fallback;
@@ -78,393 +78,316 @@ Color open_color_picker(Color current) {
   return parse_yad_color(buf, current);
 }
 
-void handle_draw(void) {
-  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-  bool right_held = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+// ── Decimation ──────────────────────────────────────────────
 
-  if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
-  bool pen_down   = g_tablet.logical_pen_down
-                    && !g_tablet.button1 && !g_tablet.button2 && !g_tablet.button3 && !ctrl;
-  bool should_draw = right_held || pen_down;
-
-  Vector2 pos = pen_down ? pen_screen_pos() : GetMousePosition();
-
-  if (should_draw && !g_state->is_drawing) {
-    if (g_state->current_tool == TOOL_ERASER) {
-      hl_lines_erase_at(pos);
-      if (g_state->black_board_enabled) bb_lines_erase_at(pos);
-      else lines_erase_at(pos);
-    } else if (g_state->current_tool == TOOL_HIGHLIGHTER) {
-      hl_line_begin();
-      g_state->is_drawing = true;
-    } else {
-      if (g_state->black_board_enabled) bb_line_begin();
-      else line_begin();
-      g_state->is_drawing = true;
-    }
-  }
-
-  if (g_state->is_drawing && !right_held && !pen_down) {
-    g_state->is_drawing = false;
-  }
-
-  if (g_state->is_drawing) {
-    Vector2 tp = to_texture_coords(pos);
-    if (g_state->current_tool == TOOL_HIGHLIGHTER) hl_line_add_point(tp);
-    else if (g_state->black_board_enabled) bb_line_add_point(tp);
-    else line_add_point(tp);
-  }
-}
-
-void lines_draw(void) {
-  for (int i = 0; i < lines_count; i++) {
-    Line* line = &lines[i];
-
-    int n = line->points_count;
-    if (n == 0) continue;
-
-    float screen_radius    = line->thickness * g_state->zoom;
-    float screen_thickness = screen_radius * 2.0F;
-
-    if (n == 1) {
-      Vector2 p = to_screen_coords(line->points[0]);
-      DrawCircleV(p, screen_radius, line->color);
-      continue;
-    }
-
-    if (n == 2) {
-      Vector2 p0 = to_screen_coords(line->points[0]);
-      Vector2 p1 = to_screen_coords(line->points[1]);
-      DrawLineEx(p0, p1, screen_thickness, line->color);
-      DrawCircleV(p1, screen_radius, line->color);
-      continue;
-    }
-
-    // start
-    Vector2 start = to_screen_coords(line->points[0]);
-    DrawCircleV(start, screen_radius, line->color);
-
-    // segments
-    for (int j = 0; j < n - 2; j++) {
-      Vector2 P0 = to_screen_coords(line->points[j + 0]);
-      Vector2 P1 = to_screen_coords(line->points[j + 1]);
-      Vector2 P2 = to_screen_coords(line->points[j + 2]);
-
-      Vector2 average_p0_p1 = Vector2Scale(Vector2Add(P0, P2), 0.5F);
-      Vector2 ctrl          = Vector2Subtract(Vector2Scale(P1, 2.0F), average_p0_p1);
-
-      DrawSplineSegmentBezierQuadratic(P0, ctrl, P2, screen_thickness, line->color);
-    }
-
-    // end
-    Vector2 end = to_screen_coords(line->points[n - 1]);
-    DrawCircleV(end, screen_radius, line->color);
-  }
-}
-
-void lines_clear(void) {
-  s_lines_dirty = true;
-  for (int i = 0; i < lines_count; i++) free(lines[i].points);
-  free(lines);
-  lines          = NULL;
-  lines_count    = 0;
-  lines_capacity = 0;
-}
-
-void lines_erase_at(Vector2 screen_pos) {
-  for (int i = lines_count - 1; i >= 0; i--) {
-    Line* line = &lines[i];
-    float threshold = line->thickness * g_state->zoom + 8.0F;
-
-    if (line->points_count == 1) {
-      Vector2 p = to_screen_coords(line->points[0]);
-      if (Vector2Distance(screen_pos, p) < threshold) goto remove;
-      continue;
-    }
-
-    for (int j = 0; j < line->points_count - 1; j++) {
-      Vector2 a = to_screen_coords(line->points[j]);
-      Vector2 b = to_screen_coords(line->points[j + 1]);
-      if (dist_to_segment(screen_pos, a, b) < threshold) goto remove;
-    }
-    continue;
-
-  remove:
-    s_lines_dirty = true;
-    free(line->points);
-    memmove(&lines[i], &lines[i + 1], (lines_count - i - 1) * sizeof(Line));
-    lines_count--;
-    return;
-  }
-}
-
-#define DECIMATE_DIST 1.0f
-
-static bool decimate(Vector2* points, int count, Vector2 new_pos) {
+static bool decimate(const Vector2* points, int count, Vector2 new_pos_world, float zoom) {
   if (count == 0) return false;
-  return Vector2Distance(new_pos, points[count - 1]) < DECIMATE_DIST;
+  float screen_dist = Vector2Distance(new_pos_world, points[count - 1]) * zoom;
+  return screen_dist < 2.0f;
 }
 
-static void line_begin(void) {
-  s_lines_dirty = true;
-  if (lines_count >= lines_capacity) {
-    int   new_lines_capacity = (lines_capacity == 0) ? 4 : lines_capacity * 2;
-    Line* new_lines          = realloc(lines, sizeof(Line) * new_lines_capacity);
-    assert(new_lines);
+// ── Stroke Memory Management ────────────────────────────────
 
-    lines          = new_lines;
-    lines_capacity = new_lines_capacity;
+static void stroke_free_data(Stroke* stroke) {
+  if (stroke->points) {
+    free(stroke->points);
+    stroke->points = NULL;
+  }
+  stroke->points_count = 0;
+  stroke->points_capacity = 0;
+}
+
+static void stroke_begin(DrawLayer layer, ToolType tool, ShapeType shape, float screen_size, Color color) {
+  StrokeLayer* l = get_layer(layer);
+  if (l->count >= l->capacity) {
+    int new_cap = (l->capacity == 0) ? 8 : l->capacity * 2;
+    Stroke* new_strokes = realloc(l->strokes, sizeof(Stroke) * new_cap);
+    assert(new_strokes);
+    l->strokes = new_strokes;
+    l->capacity = new_cap;
   }
 
-  float size = (g_state->current_tool == TOOL_ERASER) ? g_state->tool_eraser_size : g_state->tool_pen_size;
+  Stroke* s = &l->strokes[l->count++];
+  s->type = shape;
+  s->tool = tool;
+  s->points = NULL;
+  s->points_count = 0;
+  s->points_capacity = 0;
+  s->thickness = screen_size / g_state->zoom;
+  s->color = color;
 
-  Color color = g_configuration->draw_color;
-
-  Line* new_line = &lines[lines_count++];
-  *new_line      = (Line){
-    .thickness = size / g_state->zoom,
-    .color     = color,
-  };
-}
-
-static void line_add_point(Vector2 texture_pos) {
-  Line* current_line = &lines[lines_count - 1];
-
-  if (decimate(current_line->points, current_line->points_count, texture_pos)) return;
-
-  s_lines_dirty = true;
-
-  if (current_line->points_count >= current_line->points_capacity) {
-    int      new_points_capacity = (current_line->points_capacity == 0) ? 64 : current_line->points_capacity * 2;
-    Vector2* new_points          = realloc(current_line->points, sizeof(Vector2) * new_points_capacity);
-    assert(new_points);
-
-    current_line->points          = new_points;
-    current_line->points_capacity = new_points_capacity;
+  if (tool == TOOL_HIGHLIGHTER) {
+    l->hl_dirty = true;
+  } else {
+    l->dirty = true;
   }
-
-  current_line->points[current_line->points_count++] = texture_pos;
+  s_active_stroke = s;
 }
 
-static void bb_line_begin(void) {
-  s_bb_lines_dirty = true;
-  if (bb_lines_count >= bb_lines_capacity) {
-    int   new_cap = (bb_lines_capacity == 0) ? 4 : bb_lines_capacity * 2;
-    Line* new_buf = realloc(bb_lines, sizeof(Line) * new_cap);
-    assert(new_buf);
-    bb_lines          = new_buf;
-    bb_lines_capacity = new_cap;
-  }
+static void stroke_add_point(Vector2 texture_pos) {
+  if (!s_active_stroke) return;
+  if (decimate(s_active_stroke->points, s_active_stroke->points_count, texture_pos, g_state->zoom)) return;
 
-  float size = (g_state->current_tool == TOOL_ERASER) ? g_state->tool_eraser_size : g_state->tool_pen_size;
-  Color color = g_configuration->draw_color;
-
-  Line* line = &bb_lines[bb_lines_count++];
-  *line = (Line){
-    .thickness = size / g_state->zoom,
-    .color     = color,
-  };
-}
-
-static void bb_line_add_point(Vector2 texture_pos) {
-  Line* line = &bb_lines[bb_lines_count - 1];
-
-  if (decimate(line->points, line->points_count, texture_pos)) return;
-
-  s_bb_lines_dirty = true;
-
-  if (line->points_count >= line->points_capacity) {
-    int      new_cap = (line->points_capacity == 0) ? 64 : line->points_capacity * 2;
-    Vector2* new_pts = realloc(line->points, sizeof(Vector2) * new_cap);
+  if (s_active_stroke->points_count >= s_active_stroke->points_capacity) {
+    int new_cap = (s_active_stroke->points_capacity == 0) ? 32 : s_active_stroke->points_capacity * 2;
+    Vector2* new_pts = realloc(s_active_stroke->points, sizeof(Vector2) * new_cap);
     assert(new_pts);
-    line->points          = new_pts;
-    line->points_capacity = new_cap;
+    s_active_stroke->points = new_pts;
+    s_active_stroke->points_capacity = new_cap;
   }
-  line->points[line->points_count++] = texture_pos;
-}
+  s_active_stroke->points[s_active_stroke->points_count++] = texture_pos;
 
-static void hl_line_begin(void) {
-  Line** arr     = g_state->black_board_enabled ? &bb_hl_lines : &hl_lines;
-  int*   cnt     = g_state->black_board_enabled ? &bb_hl_lines_count : &hl_lines_count;
-  int*   cap     = g_state->black_board_enabled ? &bb_hl_lines_capacity : &hl_lines_capacity;
-  int    cur_cnt = *cnt;
-  int    cur_cap = *cap;
-  if (cur_cnt >= cur_cap) {
-    int   new_cap = (cur_cap == 0) ? 4 : cur_cap * 2;
-    Line* new_buf = realloc(*arr, sizeof(Line) * new_cap);
-    assert(new_buf);
-    *arr          = new_buf;
-    *cap          = new_cap;
-  }
-  float size = g_state->tool_pen_size;
-  Color color = g_configuration->draw_color;
-  float ha = HIGHLIGHTER_ALPHA * (color.a / 255.0f);
-  color.a = (unsigned char)(ha * 255.0f);
-  Line* line = &(*arr)[*cnt];
-  *line = (Line){
-    .thickness = size / g_state->zoom,
-    .color     = color,
-  };
-  (*cnt)++;
-}
-
-static void hl_line_add_point(Vector2 texture_pos) {
-  Line* arr = g_state->black_board_enabled ? bb_hl_lines : hl_lines;
-  int   idx = (g_state->black_board_enabled ? bb_hl_lines_count : hl_lines_count) - 1;
-  Line* line = &arr[idx];
-
-  if (decimate(line->points, line->points_count, texture_pos)) return;
-
-  if (line->points_count >= line->points_capacity) {
-    int      new_cap = (line->points_capacity == 0) ? 64 : line->points_capacity * 2;
-    Vector2* new_pts = realloc(line->points, sizeof(Vector2) * new_cap);
-    assert(new_pts);
-    line->points          = new_pts;
-    line->points_capacity = new_cap;
-  }
-  line->points[line->points_count++] = texture_pos;
-}
-
-static Vector2 to_texture_coords(Vector2 screen_pos) {
-  return Vector2Scale(Vector2Subtract(screen_pos, g_state->pan), 1.0F / g_state->zoom);
-}
-
-static Vector2 to_screen_coords(Vector2 texture_pos) {
-  return Vector2Add(Vector2Scale(texture_pos, g_state->zoom), g_state->pan);
-}
-
-void bb_lines_draw(void) {
-  for (int i = 0; i < bb_lines_count; i++) {
-    Line* line = &bb_lines[i];
-    int n = line->points_count;
-    if (n == 0) continue;
-    float screen_radius    = line->thickness * g_state->zoom;
-    float screen_thickness = screen_radius * 2.0F;
-    if (n == 1) {
-      DrawCircleV(to_screen_coords(line->points[0]), screen_radius, line->color);
-      continue;
-    }
-    if (n == 2) {
-      Vector2 p0 = to_screen_coords(line->points[0]);
-      Vector2 p1 = to_screen_coords(line->points[1]);
-      DrawLineEx(p0, p1, screen_thickness, line->color);
-      DrawCircleV(p1, screen_radius, line->color);
-      continue;
-    }
-    DrawCircleV(to_screen_coords(line->points[0]), screen_radius, line->color);
-    for (int j = 0; j < n - 2; j++) {
-      Vector2 P0 = to_screen_coords(line->points[j + 0]);
-      Vector2 P1 = to_screen_coords(line->points[j + 1]);
-      Vector2 P2 = to_screen_coords(line->points[j + 2]);
-      Vector2 avg = Vector2Scale(Vector2Add(P0, P2), 0.5F);
-      Vector2 ctrl = Vector2Subtract(Vector2Scale(P1, 2.0F), avg);
-      DrawSplineSegmentBezierQuadratic(P0, ctrl, P2, screen_thickness, line->color);
-    }
-    DrawCircleV(to_screen_coords(line->points[n - 1]), screen_radius, line->color);
+  StrokeLayer* l = get_active_layer();
+  if (s_active_stroke->tool == TOOL_HIGHLIGHTER) {
+    l->hl_dirty = true;
+  } else {
+    l->dirty = true;
   }
 }
 
-void bb_lines_clear(void) {
-  s_bb_lines_dirty = true;
-  for (int i = 0; i < bb_lines_count; i++) free(bb_lines[i].points);
-  free(bb_lines);
-  bb_lines          = NULL;
-  bb_lines_count    = 0;
-  bb_lines_capacity = 0;
+static void stroke_end(void) {
+  s_active_stroke = NULL;
+  s_has_last_pos  = false;
 }
 
-void bb_lines_erase_at(Vector2 screen_pos) {
-  for (int i = bb_lines_count - 1; i >= 0; i--) {
-    Line* line = &bb_lines[i];
-    float threshold = line->thickness * g_state->zoom + 8.0F;
-    if (line->points_count == 1) {
-      if (Vector2Distance(screen_pos, to_screen_coords(line->points[0])) < threshold) goto remove;
-      continue;
-    }
-    for (int j = 0; j < line->points_count - 1; j++) {
-      Vector2 a = to_screen_coords(line->points[j]);
-      Vector2 b = to_screen_coords(line->points[j + 1]);
-      if (dist_to_segment(screen_pos, a, b) < threshold) goto remove;
-    }
-    continue;
-  remove:
-    s_bb_lines_dirty = true;
-    free(line->points);
-    memmove(&bb_lines[i], &bb_lines[i + 1], (bb_lines_count - i - 1) * sizeof(Line));
-    bb_lines_count--;
-    return;
+void draw_clear_layer(DrawLayer layer) {
+  StrokeLayer* l = get_layer(layer);
+  for (int i = 0; i < l->count; i++) {
+    stroke_free_data(&l->strokes[i]);
+  }
+  free(l->strokes);
+  l->strokes  = NULL;
+  l->count    = 0;
+  l->capacity = 0;
+  l->dirty    = true;
+  l->hl_dirty = true;
+  if (s_active_stroke) s_active_stroke = NULL;
+}
+
+void draw_clear_current(void) {
+  draw_clear_layer(g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE);
+}
+
+void draw_clear_all(void) {
+  for (int i = 0; i < LAYER_COUNT; i++) {
+    draw_clear_layer((DrawLayer)i);
   }
 }
 
-static RenderTexture2D s_hl_rt   = { 0 };
-static int            s_hl_rt_w = 0;
-static int            s_hl_rt_h = 0;
+bool draw_is_dirty(DrawLayer layer) {
+  StrokeLayer* l = get_layer(layer);
+  return l->dirty || l->hl_dirty;
+}
 
-static void hl_draw_into_rt(Line* arr, int count) {
-  for (int i = 0; i < count; i++) {
-    Line* line = &arr[i];
-    int n = line->points_count;
-    if (n == 0) continue;
-    Color c = line->color;
-    c.a = 255;
-    float screen_radius    = line->thickness * g_state->zoom;
-    float screen_thickness = screen_radius * 2.0F;
-    if (n == 1) {
-      DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
-      continue;
-    }
-    if (n == 2) {
-      Vector2 p0 = to_screen_coords(line->points[0]);
-      Vector2 p1 = to_screen_coords(line->points[1]);
-      DrawLineEx(p0, p1, screen_thickness, c);
-      DrawCircleV(p1, screen_radius, c);
-      continue;
-    }
-    DrawCircleV(to_screen_coords(line->points[0]), screen_radius, c);
-    for (int j = 0; j < n - 2; j++) {
-      Vector2 P0 = to_screen_coords(line->points[j + 0]);
-      Vector2 P1 = to_screen_coords(line->points[j + 1]);
-      Vector2 P2 = to_screen_coords(line->points[j + 2]);
-      Vector2 avg = Vector2Scale(Vector2Add(P0, P2), 0.5F);
-      Vector2 ctrl = Vector2Subtract(Vector2Scale(P1, 2.0F), avg);
-      DrawSplineSegmentBezierQuadratic(P0, ctrl, P2, screen_thickness, c);
-    }
-    DrawCircleV(to_screen_coords(line->points[n - 1]), screen_radius, c);
+void draw_clear_dirty(DrawLayer layer) {
+  get_layer(layer)->dirty = false;
+}
+
+void draw_cleanup(void) {
+  if (s_hl_rt.id != 0) {
+    UnloadRenderTexture(s_hl_rt);
+    s_hl_rt   = (RenderTexture2D){ 0 };
+    s_hl_rt_w = 0;
+    s_hl_rt_h = 0;
   }
 }
 
-bool hl_render_rt(void) {
+void draw_free_all_memory(void) {
+  for (int i = 0; i < LAYER_COUNT; i++) {
+    StrokeLayer* l = &s_layers[i];
+    for (int j = 0; j < l->count; j++) {
+      stroke_free_data(&l->strokes[j]);
+    }
+    free(l->strokes);
+    l->strokes  = NULL;
+    l->count    = 0;
+    l->capacity = 0;
+  }
+}
+
+// ── Stroke Rendering (Smooth Bezier & Shapes) ───────────────
+
+static void render_stroke(const Stroke* stroke, float zoom, Vector2 pan, Color color) {
+  (void)pan;
+  int n = stroke->points_count;
+  if (n <= 0) return;
+
+  float screen_radius    = stroke->thickness * zoom;
+  float screen_thickness = screen_radius * 2.0f;
+
+  switch (stroke->type) {
+    case SHAPE_FREEHAND: {
+      if (n == 1) {
+        Vector2 p = to_screen_coords(stroke->points[0]);
+        DrawCircleV(p, screen_radius, color);
+        return;
+      }
+      if (n == 2) {
+        Vector2 p0 = to_screen_coords(stroke->points[0]);
+        Vector2 p1 = to_screen_coords(stroke->points[1]);
+        DrawLineEx(p0, p1, screen_thickness, color);
+        DrawCircleV(p0, screen_radius, color);
+        DrawCircleV(p1, screen_radius, color);
+        return;
+      }
+
+      Vector2 p0 = to_screen_coords(stroke->points[0]);
+      Vector2 p1 = to_screen_coords(stroke->points[1]);
+      Vector2 pn = to_screen_coords(stroke->points[n - 1]);
+
+      DrawCircleV(p0, screen_radius, color);
+      DrawCircleV(pn, screen_radius, color);
+
+      Vector2 m_prev = Vector2Scale(Vector2Add(p0, p1), 0.5f);
+      DrawLineEx(p0, m_prev, screen_thickness, color);
+
+      for (int j = 1; j < n - 1; j++) {
+        Vector2 pj   = to_screen_coords(stroke->points[j]);
+        Vector2 pj1  = to_screen_coords(stroke->points[j + 1]);
+        Vector2 m_curr = Vector2Scale(Vector2Add(pj, pj1), 0.5f);
+
+        DrawSplineSegmentBezierQuadratic(m_prev, pj, m_curr, screen_thickness, color);
+        m_prev = m_curr;
+      }
+
+      DrawLineEx(m_prev, pn, screen_thickness, color);
+      break;
+    }
+    case SHAPE_LINE: {
+      if (n >= 2) {
+        Vector2 p0 = to_screen_coords(stroke->points[0]);
+        Vector2 p1 = to_screen_coords(stroke->points[1]);
+        DrawLineEx(p0, p1, screen_thickness, color);
+        DrawCircleV(p0, screen_radius, color);
+        DrawCircleV(p1, screen_radius, color);
+      }
+      break;
+    }
+    case SHAPE_RECTANGLE: {
+      if (n >= 2) {
+        Vector2 p0 = to_screen_coords(stroke->points[0]);
+        Vector2 p1 = to_screen_coords(stroke->points[1]);
+        float rx = fminf(p0.x, p1.x);
+        float ry = fminf(p0.y, p1.y);
+        float rw = fabsf(p1.x - p0.x);
+        float rh = fabsf(p1.y - p0.y);
+        DrawRectangleLinesEx((Rectangle){ rx, ry, rw, rh }, screen_thickness, color);
+      }
+      break;
+    }
+    case SHAPE_CIRCLE: {
+      if (n >= 2) {
+        Vector2 p0 = to_screen_coords(stroke->points[0]);
+        Vector2 p1 = to_screen_coords(stroke->points[1]);
+        float r = Vector2Distance(p0, p1);
+        if (screen_thickness > 1.5f) {
+          DrawRing(p0, fmaxf(0.0f, r - screen_radius), r + screen_radius, 0.0f, 360.0f, 64, color);
+        } else {
+          DrawCircleLines((int)p0.x, (int)p0.y, r, color);
+        }
+      }
+      break;
+    }
+    case SHAPE_ARROW: {
+      if (n >= 2) {
+        Vector2 p0 = to_screen_coords(stroke->points[0]);
+        Vector2 p1 = to_screen_coords(stroke->points[1]);
+        DrawLineEx(p0, p1, screen_thickness, color);
+        DrawCircleV(p0, screen_radius, color);
+
+        Vector2 dir    = Vector2Normalize(Vector2Subtract(p1, p0));
+        Vector2 normal = (Vector2){ -dir.y, dir.x };
+        float head_len = fmaxf(screen_thickness * 3.5f, 15.0f);
+        float head_w   = head_len * 0.5f;
+        Vector2 a1 = Vector2Add(Vector2Subtract(p1, Vector2Scale(dir, head_len)), Vector2Scale(normal, head_w));
+        Vector2 a2 = Vector2Subtract(Vector2Subtract(p1, Vector2Scale(dir, head_len)), Vector2Scale(normal, head_w));
+        DrawTriangle(p1, a2, a1, color);
+      }
+      break;
+    }
+  }
+}
+
+void draw_layer_normal(DrawLayer layer) {
+  StrokeLayer* l = get_layer(layer);
+  for (int i = 0; i < l->count; i++) {
+    const Stroke* s = &l->strokes[i];
+    if (s->tool == TOOL_HIGHLIGHTER) continue;
+    render_stroke(s, g_state->zoom, g_state->pan, s->color);
+  }
+}
+
+// ── Dot Grid ────────────────────────────────────────────────
+
+void draw_dot_grid(int sw, int sh, Vector2 pan, float zoom) {
+  float spacing = 50.0F * zoom;
+  if (spacing < 4.0F) spacing = 4.0F;
+
+  float dot_r = 1.5F;
+  if (zoom > 1.0F) dot_r = 1.5F + (zoom - 1.0F) * 0.2F;
+  for (float sx = fmodf(pan.x, spacing) - spacing; sx < (float)sw; sx += spacing) {
+    for (float sy = fmodf(pan.y, spacing) - spacing; sy < (float)sh; sy += spacing) {
+      DrawCircleV((Vector2){ sx, sy }, dot_r, (Color){ 60, 60, 60, 255 });
+    }
+  }
+
+  if (zoom > 4.0F) {
+    float half_sp = spacing * 0.5F;
+    float mini_r  = dot_r * 0.35F;
+    Color mini_c  = (Color){ 50, 50, 50, 200 };
+    for (float sx = fmodf(pan.x + half_sp, spacing) - spacing; sx < (float)sw; sx += spacing) {
+      for (float sy = fmodf(pan.y + half_sp, spacing) - spacing; sy < (float)sh; sy += spacing) {
+        DrawCircleV((Vector2){ sx, sy }, mini_r, mini_c);
+      }
+    }
+  }
+}
+
+// ── Highlighter Rendering ───────────────────────────────────
+
+void draw_render_highlighter(DrawLayer layer, bool view_changed) {
   int sw = GetScreenWidth();
   int sh = GetScreenHeight();
+  if (sw <= 0 || sh <= 0) return;
 
-  bool render_hl = hl_lines_count > 0 && !g_state->black_board_enabled;
-  bool render_bb = bb_hl_lines_count > 0 && g_state->black_board_enabled;
-  if (!render_hl && !render_bb) return false;
+  StrokeLayer* l = get_layer(layer);
+  int hl_count = 0;
+  for (int i = 0; i < l->count; i++) {
+    if (l->strokes[i].tool == TOOL_HIGHLIGHTER) hl_count++;
+  }
 
   if (s_hl_rt.id == 0 || s_hl_rt_w != sw || s_hl_rt_h != sh) {
     if (s_hl_rt.id != 0) UnloadRenderTexture(s_hl_rt);
     s_hl_rt   = LoadRenderTexture(sw, sh);
     s_hl_rt_w = sw;
     s_hl_rt_h = sh;
+    l->hl_dirty = true;
   }
+
+  if (!view_changed && !l->hl_dirty) return;
 
   BeginTextureMode(s_hl_rt);
   ClearBackground((Color){ 0, 0, 0, 0 });
-  if (render_hl) hl_draw_into_rt(hl_lines, hl_lines_count);
-  if (render_bb) hl_draw_into_rt(bb_hl_lines, bb_hl_lines_count);
+  if (hl_count > 0) {
+    for (int i = 0; i < l->count; i++) {
+      const Stroke* s = &l->strokes[i];
+      if (s->tool != TOOL_HIGHLIGHTER) continue;
+      Color c = s->color;
+      c.a = 255;
+      render_stroke(s, g_state->zoom, g_state->pan, c);
+    }
+  }
   EndTextureMode();
-  return true;
+  l->hl_dirty = false;
 }
 
-void hl_composite(void) {
+void draw_composite_highlighter(void) {
   if (s_hl_rt.id == 0) return;
-  bool active = (hl_lines_count > 0 && !g_state->black_board_enabled) ||
-                (bb_hl_lines_count > 0 && g_state->black_board_enabled);
-  if (!active) return;
   int sw = GetScreenWidth();
   int sh = GetScreenHeight();
   unsigned char ha_byte = (unsigned char)(255.0f * HIGHLIGHTER_ALPHA);
   Color tint = { ha_byte, ha_byte, ha_byte, ha_byte };
+
   BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
   DrawTextureRec(
     s_hl_rt.texture,
@@ -475,75 +398,168 @@ void hl_composite(void) {
   EndBlendMode();
 }
 
-void hl_lines_draw(void) {
-  if (hl_render_rt()) hl_composite();
+// ── Eraser Collision & Hit Testing ──────────────────────────
+
+static inline float ccw(Vector2 a, Vector2 b, Vector2 c) {
+  return (c.y - a.y) * (b.x - a.x) - (b.y - a.y) * (c.x - a.x);
 }
 
-void hl_clear(void) {
-  for (int i = 0; i < hl_lines_count; i++) free(hl_lines[i].points);
-  free(hl_lines);
-  hl_lines          = NULL;
-  hl_lines_count    = 0;
-  hl_lines_capacity = 0;
-  if (s_hl_rt.id != 0) {
-    UnloadRenderTexture(s_hl_rt);
-    s_hl_rt = (RenderTexture2D){ 0 };
-    s_hl_rt_w = 0;
-    s_hl_rt_h = 0;
-  }
-}
-
-void bb_hl_clear(void) {
-  for (int i = 0; i < bb_hl_lines_count; i++) free(bb_hl_lines[i].points);
-  free(bb_hl_lines);
-  bb_hl_lines          = NULL;
-  bb_hl_lines_count    = 0;
-  bb_hl_lines_capacity = 0;
-  if (s_hl_rt.id != 0) {
-    UnloadRenderTexture(s_hl_rt);
-    s_hl_rt = (RenderTexture2D){ 0 };
-    s_hl_rt_w = 0;
-    s_hl_rt_h = 0;
-  }
-}
-
-void hl_lines_clear(void) {
-  hl_clear();
-  bb_hl_clear();
-}
-
-static int erase_one_array(Line** arr, int* cnt, Vector2 screen_pos) {
-  for (int i = *cnt - 1; i >= 0; i--) {
-    Line* line = &(*arr)[i];
-    float threshold = line->thickness * g_state->zoom + 8.0F;
-    if (line->points_count == 1) {
-      if (Vector2Distance(screen_pos, to_screen_coords(line->points[0])) < threshold) goto remove;
-      continue;
-    }
-    for (int j = 0; j < line->points_count - 1; j++) {
-      Vector2 a = to_screen_coords(line->points[j]);
-      Vector2 b = to_screen_coords(line->points[j + 1]);
-      if (dist_to_segment(screen_pos, a, b) < threshold) goto remove;
-    }
-    continue;
-  remove:
-    free(line->points);
-    memmove(&(*arr)[i], &(*arr)[i + 1], (*cnt - i - 1) * sizeof(Line));
-    (*cnt)--;
-    return 1;
-  }
-  return 0;
-}
-
-void hl_lines_erase_at(Vector2 screen_pos) {
-  if (erase_one_array(&hl_lines, &hl_lines_count, screen_pos)) return;
-  if (erase_one_array(&bb_hl_lines, &bb_hl_lines_count, screen_pos)) return;
+static bool segments_intersect(Vector2 a, Vector2 b, Vector2 c, Vector2 d) {
+  return ((ccw(a, c, d) > 0.0f) != (ccw(b, c, d) > 0.0f)) &&
+         ((ccw(a, b, c) > 0.0f) != (ccw(a, b, d) > 0.0f));
 }
 
 static float dist_to_segment(Vector2 p, Vector2 a, Vector2 b) {
   Vector2 ab = Vector2Subtract(b, a);
   Vector2 ap = Vector2Subtract(p, a);
-  float   t  = Clamp(Vector2DotProduct(ap, ab) / Vector2DotProduct(ab, ab), 0.0F, 1.0F);
+  float ab_len2 = Vector2DotProduct(ab, ab);
+  if (ab_len2 <= 0.00001f) return Vector2Distance(p, a);
+  float t = Clamp(Vector2DotProduct(ap, ab) / ab_len2, 0.0f, 1.0f);
   Vector2 closest = Vector2Add(a, Vector2Scale(ab, t));
   return Vector2Distance(p, closest);
+}
+
+static float dist_segment_to_segment(Vector2 p0, Vector2 p1, Vector2 q0, Vector2 q1) {
+  if (segments_intersect(p0, p1, q0, q1)) return 0.0f;
+  float d = dist_to_segment(p0, q0, q1);
+  d = fminf(d, dist_to_segment(p1, q0, q1));
+  d = fminf(d, dist_to_segment(q0, p0, p1));
+  d = fminf(d, dist_to_segment(q1, p0, p1));
+  return d;
+}
+
+static bool stroke_hit_test(const Stroke* stroke, Vector2 p0, Vector2 p1, float eraser_radius, float zoom, Vector2 pan) {
+  (void)pan;
+  int n = stroke->points_count;
+  if (n <= 0) return false;
+
+  float stroke_radius = stroke->thickness * zoom;
+  float threshold     = eraser_radius + stroke_radius;
+
+  if (n == 1) {
+    Vector2 sp = to_screen_coords(stroke->points[0]);
+    return dist_to_segment(sp, p0, p1) < threshold;
+  }
+
+  for (int j = 0; j < n - 1; j++) {
+    Vector2 q0 = to_screen_coords(stroke->points[j]);
+    Vector2 q1 = to_screen_coords(stroke->points[j + 1]);
+    if (dist_segment_to_segment(p0, p1, q0, q1) < threshold) {
+      return true;
+    }
+  }
+
+  if (stroke->type == SHAPE_RECTANGLE && n >= 2) {
+    Vector2 a  = to_screen_coords(stroke->points[0]);
+    Vector2 b  = to_screen_coords(stroke->points[1]);
+    Vector2 c1 = (Vector2){ a.x, b.y };
+    Vector2 c2 = (Vector2){ b.x, a.y };
+    if (dist_segment_to_segment(p0, p1, a, c1) < threshold) return true;
+    if (dist_segment_to_segment(p0, p1, c1, b) < threshold) return true;
+    if (dist_segment_to_segment(p0, p1, b, c2) < threshold) return true;
+    if (dist_segment_to_segment(p0, p1, c2, a) < threshold) return true;
+  }
+
+  return false;
+}
+
+static void draw_erase(DrawLayer layer, Vector2 p0, Vector2 p1, float eraser_radius) {
+  StrokeLayer* l = get_layer(layer);
+  float zoom     = g_state->zoom;
+  Vector2 pan    = g_state->pan;
+
+  for (int i = l->count - 1; i >= 0; i--) {
+    if (stroke_hit_test(&l->strokes[i], p0, p1, eraser_radius, zoom, pan)) {
+      if (l->strokes[i].tool == TOOL_HIGHLIGHTER) {
+        l->hl_dirty = true;
+      } else {
+        l->dirty = true;
+      }
+      stroke_free_data(&l->strokes[i]);
+      memmove(&l->strokes[i], &l->strokes[i + 1], (l->count - i - 1) * sizeof(Stroke));
+      l->count--;
+    }
+  }
+}
+
+// ── Draw Input Handling ─────────────────────────────────────
+
+void handle_draw(void) {
+  if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
+  if (g_state->keymaps_open) return;
+
+  bool ctrl        = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+  bool right_held  = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+  bool pen_down    = g_tablet.logical_pen_down && !g_tablet.button1 && !g_tablet.button2 && !g_tablet.button3 && !ctrl;
+  bool should_draw = right_held || pen_down;
+
+  Vector2 pos   = get_cursor_screen_pos();
+  DrawLayer layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
+
+  if (should_draw) {
+    if (!g_state->is_drawing) {
+      g_state->is_drawing = true;
+      s_last_pos          = pos;
+      s_has_last_pos      = true;
+
+      if (g_state->current_tool == TOOL_ERASER) {
+        draw_erase(layer, pos, pos, g_state->tool_eraser_size);
+      } else {
+        float size = (g_state->current_tool == TOOL_HIGHLIGHTER)
+                     ? g_state->tool_highlighter_size
+                     : g_state->tool_pen_size;
+        ShapeType shape = SHAPE_FREEHAND;
+        if (g_state->current_tool == TOOL_LINE) shape = SHAPE_LINE;
+        else if (g_state->current_tool == TOOL_RECTANGLE) shape = SHAPE_RECTANGLE;
+        else if (g_state->current_tool == TOOL_CIRCLE) shape = SHAPE_CIRCLE;
+        else if (g_state->current_tool == TOOL_ARROW) shape = SHAPE_ARROW;
+
+        stroke_begin(layer, g_state->current_tool, shape, size, g_configuration->draw_color);
+        stroke_add_point(to_texture_coords(pos));
+      }
+    } else {
+      Vector2 p_prev = s_has_last_pos ? s_last_pos : pos;
+      if (g_state->current_tool == TOOL_ERASER) {
+        draw_erase(layer, p_prev, pos, g_state->tool_eraser_size);
+      } else {
+        stroke_add_point(to_texture_coords(pos));
+      }
+      s_last_pos     = pos;
+      s_has_last_pos = true;
+    }
+  } else {
+    if (g_state->is_drawing) {
+      stroke_end();
+      g_state->is_drawing = false;
+    }
+  }
+}
+
+// ── Compatibility Wrappers ──────────────────────────────────
+
+void lines_draw(void) { draw_layer_normal(LAYER_IMAGE); }
+bool is_lines_dirty(void) { return draw_is_dirty(LAYER_IMAGE); }
+bool is_bb_lines_dirty(void) { return draw_is_dirty(LAYER_BLACKBOARD); }
+void clear_lines_dirty(void) { draw_clear_dirty(LAYER_IMAGE); }
+void clear_bb_lines_dirty(void) { draw_clear_dirty(LAYER_BLACKBOARD); }
+void lines_clear(void) { draw_clear_layer(LAYER_IMAGE); }
+void lines_erase_at(Vector2 screen_pos) { draw_erase(LAYER_IMAGE, screen_pos, screen_pos, g_state->tool_eraser_size); }
+void bb_lines_clear(void) { draw_clear_layer(LAYER_BLACKBOARD); }
+void bb_lines_erase_at(Vector2 screen_pos) { draw_erase(LAYER_BLACKBOARD, screen_pos, screen_pos, g_state->tool_eraser_size); }
+void bb_lines_draw(void) { draw_layer_normal(LAYER_BLACKBOARD); }
+void hl_clear(void) { draw_clear_layer(LAYER_IMAGE); }
+void bb_hl_clear(void) { draw_clear_layer(LAYER_BLACKBOARD); }
+void hl_lines_clear(void) { draw_clear_all(); }
+void hl_lines_erase_at(Vector2 screen_pos) {
+  draw_erase(LAYER_IMAGE, screen_pos, screen_pos, g_state->tool_eraser_size);
+  draw_erase(LAYER_BLACKBOARD, screen_pos, screen_pos, g_state->tool_eraser_size);
+}
+bool hl_render_rt(void) {
+  draw_render_highlighter(g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE, true);
+  return true;
+}
+void hl_composite(void) { draw_composite_highlighter(); }
+void hl_lines_draw(void) {
+  draw_render_highlighter(g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE, true);
+  draw_composite_highlighter();
 }

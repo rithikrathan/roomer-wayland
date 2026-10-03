@@ -16,6 +16,9 @@ Configuration g_default_configuration = {
   .draw_color              = (Color){ 224, 40, 64, 255 },
   .draw_thickness          = 3.5F,
   .transparent_background  = false,
+  .daemon_mode             = false,
+  .quit_daemon             = false,
+  .no_daemon               = false,
 };
 
 Args g_default_args = {
@@ -41,6 +44,7 @@ State g_initial_state = {
   .current_tool              = TOOL_PEN,
   .tool_pen_size             = 3.5F,
   .tool_eraser_size          = 20.0F,
+  .tool_highlighter_size     = 20.0F,
   .color1                    = (Color){ 224, 40, 64, 255 },
   .color2                    = (Color){ 255, 255, 255, 255 },
   .active_swatch             = 0,
@@ -69,7 +73,5 @@ __attribute__((__destructor__)) void deinitialize_globals(void) {
   free(g_configuration);
   free(g_args);
   free(g_state);
-  lines_clear();
-  bb_lines_clear();
-  hl_lines_clear();
+  draw_free_all_memory();
 }

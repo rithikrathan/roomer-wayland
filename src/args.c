@@ -78,6 +78,18 @@ void process_commandline_arguments(int argc, char** argv) {
       g_configuration->transparent_background = true;
       continue;
     }
+    if (strcmp(*argv, "-d") == 0 || strcmp(*argv, "--daemon") == 0) {
+      g_configuration->daemon_mode = true;
+      continue;
+    }
+    if (strcmp(*argv, "-q") == 0 || strcmp(*argv, "--quit") == 0) {
+      g_configuration->quit_daemon = true;
+      continue;
+    }
+    if (strcmp(*argv, "--no-daemon") == 0) {
+      g_configuration->no_daemon = true;
+      continue;
+    }
   }
 }
 
@@ -88,9 +100,14 @@ static void print_usage(FILE* sink) {
   (void)fprintf(sink, "Usage: \n");
   (void)fprintf(sink, "  grim - | %s [options]                        Roomer Mode\n", g_args->program_name);
   (void)fprintf(sink, "  %s [options] < image.[png|jpg|webp|bmp]      Image Viewer Mode\n", g_args->program_name);
+  (void)fprintf(sink, "  %s -d, --daemon                              Run as background daemon\n", g_args->program_name);
+  (void)fprintf(sink, "  %s -q, --quit                                Stop running daemon\n", g_args->program_name);
   (void)fprintf(sink, "Options:\n");
   (void)fprintf(sink, "  -h,             --help                    %*s Show this message and exit.\n", (int)strlen(g_args->program_name), " ");
   (void)fprintf(sink, "  -v,             --version                 %*s Show version and exit.\n", (int)strlen(g_args->program_name), " ");
+  (void)fprintf(sink, "  -d,             --daemon                  %*s Run as background daemon.\n", (int)strlen(g_args->program_name), " ");
+  (void)fprintf(sink, "  -q,             --quit                    %*s Stop running daemon.\n", (int)strlen(g_args->program_name), " ");
+  (void)fprintf(sink, "                  --no-daemon               %*s Force standalone mode (ignore daemon).\n", (int)strlen(g_args->program_name), " ");
   (void)fprintf(sink, "  -ms <float>,    --monitor-scaling <float> %*s Compositor monitor scaling (default 1).\n", (int)strlen(g_args->program_name), " ");
   (void)fprintf(sink, "  -sd <path>,     --screenshot-dir <path>   %*s Folder to save screenshots in.\n", (int)strlen(g_args->program_name), " ");
   (void)fprintf(sink, "  -bg <rgba hex>, --background <rgba hex>   %*s Background color.\n", (int)strlen(g_args->program_name), " ");

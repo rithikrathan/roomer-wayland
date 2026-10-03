@@ -33,27 +33,28 @@ void handle_inputs(void) {
 
 static void handle_reset(void) {
   if (IsKeyPressed(KEY_ZERO)) {
-    bool     saved_toolbox     = g_state->toolbox_open;
-    ToolType saved_tool        = g_state->current_tool;
-    float    saved_pen_size    = g_state->tool_pen_size;
-    float    saved_eraser_size = g_state->tool_eraser_size;
-    Color    saved_color1      = g_state->color1;
-    Color    saved_color2      = g_state->color2;
-    int      saved_active      = g_state->active_swatch;
+    bool     saved_toolbox        = g_state->toolbox_open;
+    ToolType saved_tool           = g_state->current_tool;
+    float    saved_pen_size       = g_state->tool_pen_size;
+    float    saved_eraser_size    = g_state->tool_eraser_size;
+    float    saved_hl_size        = g_state->tool_highlighter_size;
+    Color    saved_color1         = g_state->color1;
+    Color    saved_color2         = g_state->color2;
+    int      saved_active         = g_state->active_swatch;
 
     *g_state            = g_initial_state;
     s_flashlight_manual = false;
-    lines_clear();
-    hl_lines_clear();
+    draw_clear_all();
 
-    g_state->toolbox_open       = saved_toolbox;
-    g_state->current_tool       = saved_tool;
-    g_state->tool_pen_size      = saved_pen_size;
-    g_state->tool_eraser_size   = saved_eraser_size;
-    g_state->color1             = saved_color1;
-    g_state->color2             = saved_color2;
-    g_state->active_swatch      = saved_active;
-    g_configuration->draw_color = saved_active ? saved_color2 : saved_color1;
+    g_state->toolbox_open          = saved_toolbox;
+    g_state->current_tool          = saved_tool;
+    g_state->tool_pen_size         = saved_pen_size;
+    g_state->tool_eraser_size      = saved_eraser_size;
+    g_state->tool_highlighter_size = saved_hl_size;
+    g_state->color1                = saved_color1;
+    g_state->color2                = saved_color2;
+    g_state->active_swatch         = saved_active;
+    g_configuration->draw_color    = saved_active ? saved_color2 : saved_color1;
   }
 }
 
@@ -154,13 +155,29 @@ static void handle_flashlight(void) {
   }
 }
 
+static float* current_tool_size_ptr(void) {
+  if (g_state->current_tool == TOOL_ERASER) return &g_state->tool_eraser_size;
+  if (g_state->current_tool == TOOL_HIGHLIGHTER) return &g_state->tool_highlighter_size;
+  return &g_state->tool_pen_size;
+}
+
+static float current_tool_size_min(void) {
+  if (g_state->current_tool == TOOL_HIGHLIGHTER) return 10.0F;
+  if (g_state->current_tool == TOOL_ERASER) return 5.0F;
+  return 0.5F;
+}
+
+static float current_tool_size_max(void) {
+  if (g_state->current_tool == TOOL_PEN) return 10.0F;
+  return 60.0F;
+}
+
 static void handle_size_keys(void) {
   bool   ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   float  step = 0.3F;
-  float* size = (g_state->current_tool == TOOL_ERASER) ? &g_state->tool_eraser_size : &g_state->tool_pen_size;
-
-  float s_min = (g_state->current_tool == TOOL_HIGHLIGHTER) ? 10.0F : 0.5F;
-  float s_max = (g_state->current_tool == TOOL_PEN) ? 10.0F : 45.0F;
+  float* size = current_tool_size_ptr();
+  float  s_min = current_tool_size_min();
+  float  s_max = current_tool_size_max();
 
   static double s_last_repeat = 0;
   bool          plus          = !ctrl && (IsKeyDown(KEY_EQUAL) || IsKeyDown(KEY_KP_ADD));
@@ -183,19 +200,40 @@ static void handle_size_keys(void) {
 }
 
 void draw_size_indicator(void) {
-  if (GetTime() > s_size_indicator_until) return;
-  float   sz = (g_state->current_tool == TOOL_ERASER) ? g_state->tool_eraser_size : g_state->tool_pen_size;
-  Vector2 m  = GetMousePosition();
-  Color   c  = g_configuration->draw_color;
-  c.a        = 80;
-  DrawCircleV(m, sz, c);
-  c.a = 200;
-  DrawCircleV(m, sz, (Color){ 255, 255, 255, 60 });
-  DrawCircleLinesV(m, sz, (Color){ 255, 255, 255, 180 });
-  // crosshair
-  float ch = 6;
-  DrawLineV((Vector2){ m.x - ch, m.y }, (Vector2){ m.x + ch, m.y }, (Color){ 255, 255, 255, 180 });
-  DrawLineV((Vector2){ m.x, m.y - ch }, (Vector2){ m.x, m.y + ch }, (Color){ 255, 255, 255, 180 });
+  if (g_state->keymaps_open) return;
+  if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
+
+  Vector2 m = get_cursor_screen_pos();
+  int sw = GetScreenWidth();
+  int sh = GetScreenHeight();
+  if (m.x < 0 || m.x > (float)sw || m.y < 0 || m.y > (float)sh) return;
+
+  float sz = *current_tool_size_ptr();
+  bool adjusting = (GetTime() <= s_size_indicator_until);
+
+  if (g_state->current_tool == TOOL_ERASER) {
+    DrawCircleV(m, sz, (Color){ 255, 255, 255, adjusting ? 45 : 20 });
+    DrawCircleLinesV(m, sz + 1.0f, (Color){ 0, 0, 0, 140 });
+    DrawCircleLinesV(m, sz, (Color){ 240, 240, 240, 220 });
+    if (sz > 3.0f) {
+      DrawCircleLinesV(m, sz - 1.0f, (Color){ 0, 0, 0, 60 });
+    }
+  } else {
+    Color c = g_configuration->draw_color;
+    unsigned char alpha_fill = (g_state->current_tool == TOOL_HIGHLIGHTER) ? 40 : 25;
+    if (adjusting) alpha_fill += 30;
+
+    DrawCircleV(m, sz, (Color){ c.r, c.g, c.b, alpha_fill });
+    DrawCircleLinesV(m, sz + 1.0f, (Color){ 0, 0, 0, 130 });
+    DrawCircleLinesV(m, sz, (Color){ c.r, c.g, c.b, 230 });
+  }
+
+  if (adjusting) {
+    float ch = fminf(sz * 0.5f, 8.0f);
+    if (ch < 4.0f) ch = 4.0f;
+    DrawLineV((Vector2){ m.x - ch, m.y }, (Vector2){ m.x + ch, m.y }, (Color){ 255, 255, 255, 200 });
+    DrawLineV((Vector2){ m.x, m.y - ch }, (Vector2){ m.x, m.y + ch }, (Color){ 255, 255, 255, 200 });
+  }
 }
 
 static void handle_toolbox(void) {

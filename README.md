@@ -11,17 +11,27 @@
 
 ```sh
 Usage:
-  grim - | ./roomer [options]                        Roomer Mode
-  ./roomer [options] < image.[png|jpg|webp|bmp]      Image Viewer Mode
+  roomer -d, --daemon                                Daemon Mode (instant startup)
+  grim - | roomer [options]                          Roomer Mode (connects to daemon or runs standalone)
+  roomer [options] < image.[png|jpg|webp|bmp]        Image Viewer Mode
+  roomer -q, --quit                                  Stop running daemon
 Options:
-  -h,             --help                                     Show this message and exit.
-  -v,             --version                                  Show version and exit.
-  -ms <float>,    --monitor-scaling <float>                  Compositor monitor scaling (default 1).
-  -bg <rgba hex>, --background <rgba hex>                    Background color.
-  -t,             --transparent                              Transparent background.
+  -h,             --help                             Show this message and exit.
+  -v,             --version                          Show version and exit.
+  -d,             --daemon                           Run as background daemon (instant startup).
+  -q,             --quit                             Stop running daemon.
+                  --no-daemon                        Force standalone mode (ignore daemon).
+  -ms <float>,    --monitor-scaling <float>          Compositor monitor scaling (default 1).
+  -bg <rgba hex>, --background <rgba hex>            Background color.
+  -t,             --transparent                      Transparent background.
 ```
 
-All defaults can be changed, if there is a need for adding more options, please open an issue.
+### Instant Startup with Daemon Mode
+
+Add `roomer --daemon` to your compositor autostart (e.g. in `hyprland.conf`: `exec-once = roomer --daemon`).
+When running in daemon mode, Roomer pre-initializes its Wayland window, shaders, and fonts in the background with 0% idle CPU.
+When your screenshot shortcut fires `grim - | roomer`, the image is passed over a local UNIX socket and the window opens **instantaneously (<10ms)**.
+Pressing `ESC` or `Q` hides the window and resets annotations, keeping it warm for the next screenshot.
 
 Because this is a native wayland window, positioning has to be done through the window manager.
 In the case of Hyprland, this can be done with the following rules:
@@ -44,23 +54,19 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 
 ## Features
 
-- **Pen, Eraser, Highlighter** – three drawing tools with adjustable size
-- **Black Board** – infinite canvas overlay with dot grid for sketching
-- **Toolbox** – GUI popup with tool selection, size slider, zoom slider, color pickers, clear & fit buttons
-- **Flashlight** – shader-based spotlight with smooth animations, adjustable radius
-- **Color picker** – pick colors via `yad` from the toolbox
-- **Color swap** – quickly toggle between two colors
-- **Keymaps overlay** – in-app keybinding reference (`H`)
-- **Reset view** – reset zoom, pan, and annotations (`0`)
-- **Fit to screen** – fit image to window (`A` or toolbox button)
-- **Smooth zoom & pan** – lerp-based smooth transitions
-- **Bezier spline smoothing** – quadratic bezier curves for smooth strokes
-- **Highlighter** – premultiplied alpha blending via render texture for proper overlay
-- **Tablet support** – evdev pen with pressure sensitivity, absolute positioning, barrel buttons
-- **Tablet zoom** – anchor-distance zoom (Ctrl+touch or pen button2)
-- **Pen pan** – pan using pen barrel button 1
-- **Eraser** – per-stroke erasing (hits detection via distance-to-segment)
-- **Clear** – clear current layer strokes
+- **Daemon Mode (`--daemon`)** – instant startup (<10ms) via local UNIX socket; pre-warms window and shaders with 0% idle CPU
+- **Pen, Eraser, Highlighter** – three core drawing tools with adjustable stroke and eraser sizes
+- **Persistent Cursor Size Indicator** – real-time visual indicator under the cursor matching active tool size
+- **Zero-Jitter Smooth Rendering** – direct floating-point subpixel rendering for buttery smooth 120 FPS zoom & pan
+- **Black Board** – infinite canvas overlay with dot grid for sketching (`B`)
+- **Toolbox** – draggable GUI popup with tool selection, size slider, zoom slider, color pickers, clear & fit buttons (`C`)
+- **Flashlight** – shader-based spotlight with smooth animations and adjustable radius (`F`)
+- **Color Picker & Quick Swap** – pick colors via `yad` from the toolbox or swap primary/secondary colors (`X`)
+- **Keymaps Overlay** – in-app keybinding reference (`H`)
+- **Reset View & Fit** – reset zoom/pan/annotations (`0`) or fit image to screen (`A`)
+- **Bezier Spline Smoothing** – midpoint quadratic bezier curves for smooth freehand strokes
+- **Composited Highlighter** – premultiplied alpha blending via offscreen target for overlap-free highlighting
+- **Tablet Support** – evdev stylus support with pressure sensitivity and barrel buttons
 
 ## Keybindings
 
@@ -69,14 +75,15 @@ monitor=DP-1, 3840x2160@144, 0x0, 1.666667  =>  --monitor-scaling 1.666667
 | `1`                    | Pen                                                     |
 | `2`                    | Eraser                                                  |
 | `3`                    | Highlighter                                             |
+| `+` / `-`              | Increase / decrease brush or eraser size                |
 | `B`                    | Toggle Blackboard                                       |
 | `C`                    | Toggle Toolbox                                          |
 | `F`                    | Toggle Flashlight                                       |
-| `H`                    | Toggle Keybindings help                                 |
-| `X`                    | Swap colors                                             |
+| `H`                    | Toggle Keybindings help overlay                         |
+| `X`                    | Swap primary and secondary colors                       |
 | `A`                    | Fit image to screen                                     |
-| `0`                    | Reset view                                              |
-| `ESC` / `Q`           | Quit                                                    |
+| `0`                    | Reset view & clear annotations                          |
+| `ESC` / `Q`            | Hide window (daemon mode) or Quit (standalone)          |
 | Left Mouse Drag        | Pan                                                     |
 | Right Mouse Drag       | Draw                                                    |
 | Mouse Wheel            | Zoom In / Out                                           |

@@ -1,7 +1,8 @@
 #include "roomer.h"
+#include "daemon.h"
 
 // clang-format off
-static const char* flashlight_frag_shader_source =
+const char* g_flashlight_frag_shader_source =
   "#version 330 core\n"
   "in vec2 fragTexCoord;\n"
   "in vec4 fragColor;\n"
@@ -22,8 +23,124 @@ static const char* flashlight_frag_shader_source =
   "}\n";
 // clang-format on
 
+void app_render_frame(Texture2D img_texture, Shader flashlight_shader, int loc_center, int loc_radius, int loc_darkness, int loc_texture) {
+  handle_inputs();
+
+  float dt       = GetFrameTime();
+  float z_speed  = 1.0F - expf(-15.0F * dt);
+  g_state->zoom  = Lerp(g_state->zoom, g_state->target_zoom, z_speed);
+  g_state->pan.x = Lerp(g_state->pan.x, g_state->target_pan.x, z_speed);
+  g_state->pan.y = Lerp(g_state->pan.y, g_state->target_pan.y, z_speed);
+
+  // Smooth scroll: always keep flashlight_radius chasing target_flashlight_radius
+  float r_smooth             = 1.0F - expf(-15.0F * dt);
+  g_state->flashlight_radius = Lerp(g_state->flashlight_radius, g_state->target_flashlight_radius, r_smooth);
+
+  // Flashlight on/off animation
+  {
+    float r_fast = 1.0F - expf(-15.0F * dt);
+    float r_slow = 1.0F - expf(-20.0F * dt);
+    float a_slow = 1.0F - expf(-10.0F * dt);
+
+    float big = g_state->flashlight_radius + 250.0F;
+
+    if (!g_state->flashlight_prev_enabled && g_state->flashlight_enabled) {
+      g_state->flashlight_display_radius = big;
+      g_state->flashlight_darkness       = 1.0F;
+      g_state->flashlight_rendering      = true;
+    }
+
+    if (g_state->flashlight_rendering) {
+      if (g_state->flashlight_enabled) {
+        float speed                        = g_state->flashlight_display_radius > g_state->flashlight_radius ? r_fast : r_slow;
+        g_state->flashlight_display_radius = Lerp(g_state->flashlight_display_radius, g_state->flashlight_radius, speed);
+        g_state->flashlight_darkness       = Lerp(g_state->flashlight_darkness, 0.1F, a_slow);
+      } else {
+        g_state->flashlight_display_radius = Lerp(g_state->flashlight_display_radius, big, r_slow);
+        g_state->flashlight_darkness       = Lerp(g_state->flashlight_darkness, 1.0F, a_slow);
+        if (g_state->flashlight_display_radius >= big - 2.0F && g_state->flashlight_darkness >= 0.95F) {
+          g_state->flashlight_display_radius = g_state->flashlight_radius;
+          g_state->flashlight_darkness       = 0.1F;
+          g_state->flashlight_rendering      = false;
+        }
+      }
+    }
+
+    g_state->flashlight_prev_enabled = g_state->flashlight_enabled;
+  }
+
+  int sw = GetScreenWidth();
+  int sh = GetScreenHeight();
+
+  DrawLayer active_layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
+
+  static float   s_last_zoom = 0;
+  static Vector2 s_last_pan  = { 0 };
+  static bool    s_last_bb   = false;
+  bool view_changed = (g_state->zoom != s_last_zoom) ||
+                      (g_state->pan.x != s_last_pan.x) ||
+                      (g_state->pan.y != s_last_pan.y) ||
+                      (g_state->black_board_enabled != s_last_bb);
+
+  s_last_zoom = g_state->zoom;
+  s_last_pan  = g_state->pan;
+  s_last_bb   = g_state->black_board_enabled;
+
+  draw_render_highlighter(active_layer, view_changed);
+
+  BeginDrawing();
+  Color bg = g_configuration->background_color;
+  if (!g_configuration->transparent_background) bg.a = 255;
+  ClearBackground(bg);
+
+  if (g_state->flashlight_rendering) {
+    Vector2 mouse_pos     = GetMousePosition();
+    float   u_center[2]   = { mouse_pos.x, (float)sh - mouse_pos.y };
+    float   u_radius[1]   = { g_state->flashlight_display_radius };
+    float   u_darkness[1] = { g_state->flashlight_darkness };
+    int     u_texture[1]  = { 0 };
+    SetShaderValue(flashlight_shader, loc_center, u_center, SHADER_UNIFORM_VEC2);
+    SetShaderValue(flashlight_shader, loc_radius, u_radius, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(flashlight_shader, loc_darkness, u_darkness, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(flashlight_shader, loc_texture, u_texture, SHADER_UNIFORM_INT);
+
+    BeginShaderMode(flashlight_shader);
+  }
+
+  if (g_state->black_board_enabled) {
+    DrawRectangle(0, 0, sw, sh, BLACK);
+    draw_dot_grid(sw, sh, g_state->pan, g_state->zoom);
+    draw_layer_normal(LAYER_BLACKBOARD);
+  } else {
+    DrawTextureEx(img_texture, g_state->pan, 0.0f, g_state->zoom, WHITE);
+    draw_layer_normal(LAYER_IMAGE);
+  }
+
+  if (g_state->flashlight_rendering) EndShaderMode();
+
+  draw_composite_highlighter();
+
+  toolbox_render();
+  keymaps_render();
+  draw_size_indicator();
+  EndDrawing();
+}
+
 int main(int argc, char** argv) {
   process_commandline_arguments(argc, argv);
+
+  if (g_configuration->quit_daemon) {
+    daemon_handle_quit_flag();
+    return 0;
+  }
+
+  if (g_configuration->daemon_mode) {
+    return daemon_server_run();
+  }
+
+  if (!g_configuration->no_daemon && daemon_client_send_image()) {
+    return 0;
+  }
 
   SetTraceLogLevel(LOG_INFO);
 
@@ -37,7 +154,6 @@ int main(int argc, char** argv) {
   } else {
     SetConfigFlags(FLAG_BORDERLESS_WINDOWED_MODE | FLAG_WINDOW_UNDECORATED | FLAG_WINDOW_TOPMOST | FLAG_WINDOW_TRANSPARENT | FLAG_WINDOW_RESIZABLE);
 
-    // compensate for monitor scaling: compositor multiplies the window size by the scaling factor
     int window_width     = (int)roundf((float)img.width / g_configuration->monitor_scaling);
     int window_height    = (int)roundf((float)img.height / g_configuration->monitor_scaling);
     g_state->zoom        = 1 / g_configuration->monitor_scaling;
@@ -53,11 +169,9 @@ int main(int argc, char** argv) {
 
   Texture2D img_texture = LoadTextureFromImage(img);
   SetTextureFilter(img_texture, TEXTURE_FILTER_POINT);
-  RenderTexture2D img_render_texture = LoadRenderTexture(img.width, img.height);
-  SetTextureFilter(img_render_texture.texture, TEXTURE_FILTER_POINT);
   UnloadImage(img);
 
-  Shader flashlight_shader = LoadShaderFromMemory(NULL, flashlight_frag_shader_source);
+  Shader flashlight_shader = LoadShaderFromMemory(NULL, g_flashlight_frag_shader_source);
   int    loc_texture       = GetShaderLocation(flashlight_shader, "texture0");
   int    loc_center        = GetShaderLocation(flashlight_shader, "center");
   int    loc_radius        = GetShaderLocation(flashlight_shader, "radius");
@@ -66,141 +180,12 @@ int main(int argc, char** argv) {
   SetTargetFPS(120);
   while (!WindowShouldClose()) {
     if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) break;
-    handle_inputs();
-
-    float dt       = GetFrameTime();
-    float z_speed  = 1.0F - expf(-15.0F * dt);
-    g_state->zoom  = Lerp(g_state->zoom, g_state->target_zoom, z_speed);
-    g_state->pan.x = Lerp(g_state->pan.x, g_state->target_pan.x, z_speed);
-    g_state->pan.y = Lerp(g_state->pan.y, g_state->target_pan.y, z_speed);
-
-    // Smooth scroll: always keep flashlight_radius chasing target_flashlight_radius
-    float r_smooth             = 1.0F - expf(-15.0F * dt);
-    g_state->flashlight_radius = Lerp(g_state->flashlight_radius, g_state->target_flashlight_radius, r_smooth);
-
-    // Flashlight on/off animation
-    {
-      float r_fast = 1.0F - expf(-15.0F * dt);
-      float r_slow = 1.0F - expf(-20.0F * dt);
-      float a_slow = 1.0F - expf(-10.0F * dt);
-
-      float big = g_state->flashlight_radius + 250.0F;
-
-      if (!g_state->flashlight_prev_enabled && g_state->flashlight_enabled) {
-        g_state->flashlight_display_radius = big;
-        g_state->flashlight_darkness       = 1.0F;
-        g_state->flashlight_rendering      = true;
-      }
-
-      if (g_state->flashlight_rendering) {
-        if (g_state->flashlight_enabled) {
-          float speed                        = g_state->flashlight_display_radius > g_state->flashlight_radius ? r_fast : r_slow;
-          g_state->flashlight_display_radius = Lerp(g_state->flashlight_display_radius, g_state->flashlight_radius, speed);
-          g_state->flashlight_darkness       = Lerp(g_state->flashlight_darkness, 0.1F, a_slow);
-        } else {
-          g_state->flashlight_display_radius = Lerp(g_state->flashlight_display_radius, big, r_slow);
-          g_state->flashlight_darkness       = Lerp(g_state->flashlight_darkness, 1.0F, a_slow);
-          if (g_state->flashlight_display_radius >= big - 2.0F && g_state->flashlight_darkness >= 0.95F) {
-            g_state->flashlight_display_radius = g_state->flashlight_radius;
-            g_state->flashlight_darkness       = 0.1F;
-            g_state->flashlight_rendering      = false;
-          }
-        }
-      }
-
-      g_state->flashlight_prev_enabled = g_state->flashlight_enabled;
-    }
-
-    {
-      static float    s_last_zoom = 0;
-      static Vector2  s_last_pan  = { 0 };
-      bool zoom_changed = g_state->zoom != s_last_zoom ||
-                          g_state->pan.x != s_last_pan.x ||
-                          g_state->pan.y != s_last_pan.y;
-
-      if (zoom_changed || is_lines_dirty() || is_bb_lines_dirty()) {
-        BeginTextureMode(img_render_texture);
-        ClearBackground(g_configuration->background_color);
-        DrawTextureEx(img_texture, g_state->pan, 0.0F, g_state->zoom, WHITE);
-        lines_draw();
-        EndTextureMode();
-        s_last_zoom = g_state->zoom;
-        s_last_pan  = g_state->pan;
-        clear_lines_dirty();
-        clear_bb_lines_dirty();
-      }
-    }
-
-    BeginDrawing();
-    hl_render_rt();
-    if (g_state->flashlight_rendering) {
-      Vector2 mouse_pos     = GetMousePosition();
-      float   u_center[2]   = { mouse_pos.x, (float)GetScreenHeight() - mouse_pos.y };
-      float   u_radius[1]   = { g_state->flashlight_display_radius };
-      float   u_darkness[1] = { g_state->flashlight_darkness };
-      int     u_texture[1]  = { 0 };
-      SetShaderValue(flashlight_shader, loc_center, u_center, SHADER_UNIFORM_VEC2);
-      SetShaderValue(flashlight_shader, loc_radius, u_radius, SHADER_UNIFORM_FLOAT);
-      SetShaderValue(flashlight_shader, loc_darkness, u_darkness, SHADER_UNIFORM_FLOAT);
-      SetShaderValue(flashlight_shader, loc_texture, u_texture, SHADER_UNIFORM_INT);
-
-      BeginShaderMode(flashlight_shader);
-    }
-
-    Color bg = g_configuration->background_color;
-    if (!g_configuration->transparent_background) bg.a = 255;
-    ClearBackground(bg);
-    DrawTextureRec(
-        img_render_texture.texture,
-        (Rectangle){ 0, 0, (float)img_render_texture.texture.width, (float)-img_render_texture.texture.height },
-        (Vector2){ 0, 0 },
-        WHITE
-    );
-
-    // ── infinite black board overlay ─────────────────────────
-    if (g_state->black_board_enabled) {
-      int sw = GetScreenWidth();
-      int sh = GetScreenHeight();
-      DrawRectangle(0, 0, sw, sh, BLACK);
-
-      float spacing = 50.0F * g_state->zoom;
-      if (spacing < 4.0F) spacing = 4.0F;
-
-      float dot_r = 1.5F;
-      if (g_state->zoom > 1.0F) dot_r = 1.5F + (g_state->zoom - 1.0F) * 0.2F;
-      for (float sx = fmodf(g_state->pan.x, spacing) - spacing; sx < sw; sx += spacing) {
-        for (float sy = fmodf(g_state->pan.y, spacing) - spacing; sy < sh; sy += spacing) {
-          DrawCircleV((Vector2){ sx, sy }, dot_r, (Color){ 60, 60, 60, 255 });
-        }
-      }
-
-      if (g_state->zoom > 4.0F) {
-        float half_sp = spacing * 0.5F;
-        float mini_r  = dot_r * 0.35F;
-        Color mini_c  = (Color){ 50, 50, 50, 200 };
-        for (float sx = fmodf(g_state->pan.x + half_sp, spacing) - spacing; sx < sw; sx += spacing) {
-          for (float sy = fmodf(g_state->pan.y + half_sp, spacing) - spacing; sy < sh; sy += spacing) {
-            DrawCircleV((Vector2){ sx, sy }, mini_r, mini_c);
-          }
-        }
-      }
-
-      bb_lines_draw();
-    }
-
-    hl_composite();
-
-    if (g_state->flashlight_rendering) EndShaderMode();
-
-    toolbox_render();
-    keymaps_render();
-    draw_size_indicator();
-    EndDrawing();
+    app_render_frame(img_texture, flashlight_shader, loc_center, loc_radius, loc_darkness, loc_texture);
   }
 
+  draw_cleanup();
   tablet_cleanup();
   UnloadShader(flashlight_shader);
-  UnloadRenderTexture(img_render_texture);
   UnloadTexture(img_texture);
   CloseWindow();
   return 0;
