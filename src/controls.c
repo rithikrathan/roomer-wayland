@@ -84,6 +84,16 @@ static void handle_reset(void) {
     Color    saved_color1         = g_state->color1;
     Color    saved_color2         = g_state->color2;
     int      saved_active         = g_state->active_swatch;
+    float    saved_shape_thick    = g_state->shape_thickness;
+    float    saved_badge_thick    = g_state->badge_border_thickness;
+    Color    saved_shape_col      = g_state->shape_border_color;
+    Color    saved_fill_col       = g_state->fill_color;
+    float    saved_fill_op        = g_state->shape_fill_opacity;
+    bool     saved_filled         = g_state->shape_filled;
+    StrokeStyle saved_style       = g_state->shape_stroke_style;
+    float    saved_font_sz        = g_state->text_font_size;
+    bool     saved_bold           = g_state->text_bold;
+    bool     saved_italic         = g_state->text_italic;
 
     *g_state            = g_initial_state;
     s_flashlight_manual = false;
@@ -97,6 +107,16 @@ static void handle_reset(void) {
     g_state->color1                = saved_color1;
     g_state->color2                = saved_color2;
     g_state->active_swatch         = saved_active;
+    g_state->shape_thickness       = saved_shape_thick;
+    g_state->badge_border_thickness= saved_badge_thick;
+    g_state->shape_border_color    = saved_shape_col;
+    g_state->fill_color            = saved_fill_col;
+    g_state->shape_fill_opacity    = saved_fill_op;
+    g_state->shape_filled          = saved_filled;
+    g_state->shape_stroke_style    = saved_style;
+    g_state->text_font_size        = saved_font_sz;
+    g_state->text_bold             = saved_bold;
+    g_state->text_italic           = saved_italic;
     g_configuration->draw_color    = saved_active ? saved_color2 : saved_color1;
   }
 }
@@ -252,7 +272,7 @@ void draw_size_indicator(void) {
   if (m.x < 0 || m.x > (float)sw || m.y < 0 || m.y > (float)sh) return;
 
   if (g_state->current_tool == TOOL_TEXT) {
-    float font_size = fmaxf(g_state->tool_pen_size * 5.0f, 18.0f);
+    float font_size = g_state->text_font_size;
     DrawLineEx((Vector2){ m.x - 4, m.y }, (Vector2){ m.x + 4, m.y }, 1.5f, WHITE);
     DrawLineEx((Vector2){ m.x, m.y }, (Vector2){ m.x, m.y + font_size }, 2.0f, WHITE);
     DrawLineEx((Vector2){ m.x - 4, m.y + font_size }, (Vector2){ m.x + 4, m.y + font_size }, 1.5f, WHITE);
@@ -260,16 +280,15 @@ void draw_size_indicator(void) {
   }
 
   if (g_state->current_tool == TOOL_STEP_BADGE) {
-    float badge_r = fmaxf(g_state->tool_pen_size * 3.2f, 16.0f);
-    Color c = g_configuration->draw_color;
+    float badge_r = fmaxf(g_state->shape_thickness * 2.8f, 18.0f);
+    Color c = g_state->shape_border_color;
     DrawCircleV(m, badge_r, (Color){ c.r, c.g, c.b, 60 });
-    DrawCircleLinesV(m, badge_r + 1.0f, (Color){ 0, 0, 0, 160 });
     DrawCircleLinesV(m, badge_r, c);
 
     char num_str[16];
     snprintf(num_str, sizeof(num_str), "%d", g_state->step_badge_counter);
     Font font = get_app_font();
-    float font_size = badge_r * 1.35f;
+    float font_size = badge_r * 1.25f;
     Vector2 text_dim = MeasureTextEx(font, num_str, font_size, 1.0f);
     Vector2 text_pos = { m.x - text_dim.x * 0.5f, m.y - text_dim.y * 0.5f };
     DrawTextEx(font, num_str, text_pos, font_size, 1.0f, c);
@@ -277,6 +296,9 @@ void draw_size_indicator(void) {
   }
 
   float sz = *current_tool_size_ptr();
+  if (g_state->current_tool >= TOOL_LINE && g_state->current_tool <= TOOL_TABLE) {
+    sz = g_state->shape_thickness;
+  }
   bool adjusting = (GetTime() <= s_size_indicator_until);
 
   if (g_state->current_tool == TOOL_ERASER) {

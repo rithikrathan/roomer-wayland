@@ -26,10 +26,15 @@ SRCS       = $(wildcard ./src/*.c) $(wildcard ./src/*.h)
 clean:
 	rm -f $(EXEC)
 
+CAIRO_CFLAGS = $(shell pkg-config --cflags cairo freetype2)
+CAIRO_LIBS   = $(shell pkg-config --libs cairo freetype2)
+
 $(EXEC): $(SRCS)
 	clang ./src/main.c ./src/globals.c ./src/args.c ./src/controls.c ./src/image.c ./src/draw.c ./src/toolbox.c ./src/tablet.c ./src/daemon.c \
 		-o $(EXEC) \
 		-std=c23 -pedantic -Wall -Wextra -Wpedantic -ggdb -O3 \
 		-flto -fPIE -lm -lglfw -I./vendor/ -L./vendor/ -lraylib \
+		$(CAIRO_CFLAGS) $(CAIRO_LIBS) \
 		-fcf-protection=full -fstack-protector-strong -fno-omit-frame-pointer \
 		-DVERSION="\"$(GIT_COMMIT)\""
+

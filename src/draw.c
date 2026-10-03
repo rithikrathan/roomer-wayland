@@ -1,4 +1,5 @@
 #include "roomer.h"
+#include <cairo/cairo.h>
 
 // ── Types and State ─────────────────────────────────────────
 
@@ -97,6 +98,10 @@ static void stroke_free_data(Stroke* stroke) {
     free(stroke->text);
     stroke->text = NULL;
   }
+  if (stroke->cached_tex.id != 0) {
+    UnloadTexture(stroke->cached_tex);
+    stroke->cached_tex = (Texture2D){ 0 };
+  }
   stroke->points_count = 0;
   stroke->points_capacity = 0;
 }
@@ -125,8 +130,14 @@ static void stroke_begin(DrawLayer layer, ToolType tool, ShapeType shape, float 
   fc.a = (unsigned char)(g_state->shape_fill_opacity * 255.0f);
   s->fill_color = fc;
   s->step_number = g_state->step_badge_counter;
+  s->badge_thickness = g_state->badge_border_thickness;
+  s->text_bold = g_state->text_bold;
+  s->text_italic = g_state->text_italic;
   s->table_rows = g_state->table_rows;
   s->table_cols = g_state->table_cols;
+  s->cached_tex = (Texture2D){ 0 };
+  s->cached_zoom = 0.0f;
+  s->cache_dirty = true;
 
   if (tool == TOOL_HIGHLIGHTER) {
     l->hl_dirty = true;
@@ -216,13 +227,18 @@ void text_commit_current(void) {
     memset(s, 0, sizeof(Stroke));
     s->type = SHAPE_TEXT;
     s->tool = TOOL_TEXT;
-    s->thickness = g_state->tool_pen_size / g_state->zoom;
-    s->color = g_configuration->draw_color;
+    s->thickness = g_state->text_font_size / g_state->zoom;
+    s->color = g_state->shape_border_color;
     s->filled = g_state->shape_filled;
     Color fc = g_state->fill_color;
     fc.a = (unsigned char)(g_state->shape_fill_opacity * 255.0f);
     s->fill_color = fc;
     s->text = strdup(g_state->text_buffer);
+    s->text_bold = g_state->text_bold;
+    s->text_italic = g_state->text_italic;
+    s->cached_tex = (Texture2D){ 0 };
+    s->cached_zoom = 0.0f;
+    s->cache_dirty = true;
 
     s->points = malloc(sizeof(Vector2));
     assert(s->points);
@@ -352,18 +368,34 @@ static void draw_styled_arrow(Vector2 p0, Vector2 p1, float thickness, Color col
   DrawTriangle(p1, a2, a1, color);
 }
 
+static inline float ccw(Vector2 a, Vector2 b, Vector2 c) {
+  return (c.y - a.y) * (b.x - a.x) - (b.y - a.y) * (c.x - a.x);
+}
+
 static void draw_styled_triangle(Vector2 p0, Vector2 p1, float thickness, Color color, StrokeStyle style, float dash_len, float dash_gap, bool filled, Color fill_color) {
-  Vector2 top = { (p0.x + p1.x) * 0.5f, fminf(p0.y, p1.y) };
-  Vector2 bl  = { fminf(p0.x, p1.x), fmaxf(p0.y, p1.y) };
-  Vector2 br  = { fmaxf(p0.x, p1.x), fmaxf(p0.y, p1.y) };
+  Vector2 dir = Vector2Subtract(p1, p0);
+  float h = Vector2Length(dir);
+  if (h < 1.0f) return;
+
+  Vector2 u = Vector2Scale(dir, 1.0f / h);
+  Vector2 n = (Vector2){ -u.y, u.x };
+  float half_base = h * 0.57735f;
+
+  Vector2 apex = p1;
+  Vector2 bl   = Vector2Add(p0, Vector2Scale(n, half_base));
+  Vector2 br   = Vector2Subtract(p0, Vector2Scale(n, half_base));
 
   if (filled) {
-    DrawTriangle(top, bl, br, fill_color);
+    if (ccw(apex, bl, br) > 0.0f) {
+      DrawTriangle(apex, bl, br, fill_color);
+    } else {
+      DrawTriangle(apex, br, bl, fill_color);
+    }
   }
 
-  draw_styled_segment(top, bl, thickness, color, style, dash_len, dash_gap);
+  draw_styled_segment(apex, bl, thickness, color, style, dash_len, dash_gap);
   draw_styled_segment(bl, br, thickness, color, style, dash_len, dash_gap);
-  draw_styled_segment(br, top, thickness, color, style, dash_len, dash_gap);
+  draw_styled_segment(br, apex, thickness, color, style, dash_len, dash_gap);
 }
 
 static void draw_styled_rectangle(Vector2 p0, Vector2 p1, float thickness, Color color, StrokeStyle style, float dash_len, float dash_gap, bool filled, Color fill_color) {
@@ -472,54 +504,236 @@ static void draw_styled_table(Vector2 p0, Vector2 p1, int rows, int cols, float 
   }
 }
 
-static void draw_step_badge(Vector2 p0, int number, float thickness, Color color, bool filled, Color fill_color) {
-  (void)fill_color;
-  float badge_r = fmaxf(thickness * 3.2f, 16.0f);
-  Font font = get_app_font();
+static Texture2D render_cairo_text(const char* text, float font_size, bool bold, bool italic, Color text_color, bool filled, Color fill_color, Vector2* out_dim) {
+  if (!text || text[0] == '\0') text = " ";
+  if (font_size < 10.0f) font_size = 10.0f;
+
+  cairo_surface_t* temp_surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+  cairo_t* cr_m = cairo_create(temp_surf);
+  cairo_select_font_face(cr_m, "Sans",
+                         italic ? CAIRO_FONT_SLANT_ITALIC : CAIRO_FONT_SLANT_NORMAL,
+                         bold ? CAIRO_FONT_WEIGHT_BOLD : CAIRO_FONT_WEIGHT_NORMAL);
+  cairo_set_font_size(cr_m, font_size);
+
+  char* dup = strdup(text);
+  char* line = strtok(dup, "\n");
+  double max_w = 0;
+  int num_lines = 0;
+  while (line) {
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr_m, line, &ext);
+    if (ext.x_advance > max_w) max_w = ext.x_advance;
+    num_lines++;
+    line = strtok(NULL, "\n");
+  }
+  free(dup);
+  cairo_destroy(cr_m);
+  cairo_surface_destroy(temp_surf);
+
+  if (num_lines == 0) num_lines = 1;
+  float line_height = font_size * 1.35f;
+  float pad = 8.0f;
+  int img_w = (int)ceilf((float)max_w + pad * 2.0f);
+  int img_h = (int)ceilf((float)num_lines * line_height + pad * 2.0f);
+  if (img_w < 16) img_w = 16;
+  if (img_h < 16) img_h = 16;
+
+  if (out_dim) {
+    out_dim->x = (float)img_w;
+    out_dim->y = (float)img_h;
+  }
+
+  cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, img_w, img_h);
+  cairo_t* cr = cairo_create(surf);
+  cairo_select_font_face(cr, "Sans",
+                         italic ? CAIRO_FONT_SLANT_ITALIC : CAIRO_FONT_SLANT_NORMAL,
+                         bold ? CAIRO_FONT_WEIGHT_BOLD : CAIRO_FONT_WEIGHT_NORMAL);
+  cairo_set_font_size(cr, font_size);
 
   if (filled) {
-    DrawCircleV(p0, badge_r, color);
-    DrawCircleLinesV(p0, badge_r + 1.0f, (Color){ 0, 0, 0, 180 });
+    cairo_rectangle(cr, 1.0, 1.0, img_w - 2.0, img_h - 2.0);
+    cairo_set_source_rgba(cr, fill_color.r / 255.0, fill_color.g / 255.0, fill_color.b / 255.0, fill_color.a / 255.0);
+    cairo_fill_preserve(cr);
+    cairo_set_source_rgba(cr, text_color.r / 255.0, text_color.g / 255.0, text_color.b / 255.0, 0.85);
+    cairo_set_line_width(cr, 1.5);
+    cairo_stroke(cr);
   } else {
-    DrawCircleV(p0, badge_r, (Color){ 10, 10, 10, 210 });
-    DrawCircleLinesV(p0, badge_r + 1.0f, (Color){ 0, 0, 0, 150 });
-    DrawCircleLinesV(p0, badge_r, color);
+    cairo_rectangle(cr, 1.0, 1.0, img_w - 2.0, img_h - 2.0);
+    cairo_set_source_rgba(cr, 0.05, 0.05, 0.05, 0.5);
+    cairo_fill(cr);
   }
+
+  cairo_set_source_rgba(cr, text_color.r / 255.0, text_color.g / 255.0, text_color.b / 255.0, text_color.a / 255.0);
+  dup = strdup(text);
+  line = strtok(dup, "\n");
+  int line_idx = 0;
+  while (line) {
+    cairo_move_to(cr, pad, pad + (line_idx + 0.85f) * line_height);
+    cairo_show_text(cr, line);
+    line_idx++;
+    line = strtok(NULL, "\n");
+  }
+  free(dup);
+
+  cairo_surface_flush(surf);
+  unsigned char* cairo_data = cairo_image_surface_get_data(surf);
+  int stride = cairo_image_surface_get_stride(surf);
+
+  unsigned char* rgba = malloc(img_w * img_h * 4);
+  assert(rgba);
+  for (int y = 0; y < img_h; y++) {
+    uint32_t* row = (uint32_t*)(cairo_data + y * stride);
+    for (int x = 0; x < img_w; x++) {
+      uint32_t pixel = row[x];
+      uint8_t a = (pixel >> 24) & 0xFF;
+      uint8_t r = (pixel >> 16) & 0xFF;
+      uint8_t g = (pixel >> 8) & 0xFF;
+      uint8_t b = pixel & 0xFF;
+      if (a > 0 && a < 255) {
+        r = (uint8_t)fminf(255.0f, (float)r * 255.0f / (float)a);
+        g = (uint8_t)fminf(255.0f, (float)g * 255.0f / (float)a);
+        b = (uint8_t)fminf(255.0f, (float)b * 255.0f / (float)a);
+      }
+      int idx = (y * img_w + x) * 4;
+      rgba[idx + 0] = r;
+      rgba[idx + 1] = g;
+      rgba[idx + 2] = b;
+      rgba[idx + 3] = a;
+    }
+  }
+
+  Image img = {
+    .data = rgba,
+    .width = img_w,
+    .height = img_h,
+    .mipmaps = 1,
+    .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+  };
+  Texture2D tex = LoadTextureFromImage(img);
+  UnloadImage(img);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surf);
+  return tex;
+}
+
+static Texture2D render_cairo_badge(int number, float radius, float border_w, Color border_color, bool filled, Color fill_color, Vector2* out_dim) {
+  int pad = (int)ceilf(border_w) + 4;
+  int dim = (int)ceilf((radius + pad) * 2.0f);
+  if (dim < 32) dim = 32;
+
+  if (out_dim) {
+    out_dim->x = (float)dim;
+    out_dim->y = (float)dim;
+  }
+
+  cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, dim, dim);
+  cairo_t* cr = cairo_create(surf);
+  double cx = dim * 0.5;
+  double cy = dim * 0.5;
+
+  cairo_arc(cr, cx, cy, radius, 0, 2.0 * M_PI);
+  if (filled) {
+    cairo_set_source_rgba(cr, fill_color.r / 255.0, fill_color.g / 255.0, fill_color.b / 255.0, fill_color.a / 255.0);
+    cairo_fill_preserve(cr);
+  } else {
+    cairo_set_source_rgba(cr, 0.08, 0.08, 0.08, 0.85);
+    cairo_fill_preserve(cr);
+  }
+
+  cairo_set_source_rgba(cr, border_color.r / 255.0, border_color.g / 255.0, border_color.b / 255.0, border_color.a / 255.0);
+  cairo_set_line_width(cr, border_w);
+  cairo_stroke(cr);
 
   char num_str[16];
   snprintf(num_str, sizeof(num_str), "%d", number);
 
-  float font_size = badge_r * 1.35f;
-  Vector2 text_dim = MeasureTextEx(font, num_str, font_size, 1.0f);
-  Vector2 text_pos = { p0.x - text_dim.x * 0.5f, p0.y - text_dim.y * 0.5f };
+  cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+  double font_size = radius * 1.25;
+  cairo_set_font_size(cr, font_size);
 
-  Color txt_color;
+  cairo_text_extents_t ext;
+  cairo_text_extents(cr, num_str, &ext);
+
+  double tx = cx - (ext.width / 2.0 + ext.x_bearing);
+  double ty = cy - (ext.height / 2.0 + ext.y_bearing);
+
   if (filled) {
-    float lum = 0.299f * color.r + 0.587f * color.g + 0.114f * color.b;
-    txt_color = (lum > 140.0f) ? (Color){ 0, 0, 0, 255 } : (Color){ 255, 255, 255, 255 };
+    float lum = 0.299f * fill_color.r + 0.587f * fill_color.g + 0.114f * fill_color.b;
+    if (lum > 150.0f && fill_color.a > 120) {
+      cairo_set_source_rgba(cr, 0.05, 0.05, 0.05, 1.0);
+    } else {
+      cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    }
   } else {
-    txt_color = color;
+    cairo_set_source_rgba(cr, border_color.r / 255.0, border_color.g / 255.0, border_color.b / 255.0, 1.0);
   }
 
-  DrawTextEx(font, num_str, text_pos, font_size, 1.0f, txt_color);
+  cairo_move_to(cr, tx, ty);
+  cairo_show_text(cr, num_str);
+
+  cairo_surface_flush(surf);
+  unsigned char* cairo_data = cairo_image_surface_get_data(surf);
+  int stride = cairo_image_surface_get_stride(surf);
+
+  unsigned char* rgba = malloc(dim * dim * 4);
+  assert(rgba);
+  for (int y = 0; y < dim; y++) {
+    uint32_t* row = (uint32_t*)(cairo_data + y * stride);
+    for (int x = 0; x < dim; x++) {
+      uint32_t pixel = row[x];
+      uint8_t a = (pixel >> 24) & 0xFF;
+      uint8_t r = (pixel >> 16) & 0xFF;
+      uint8_t g = (pixel >> 8) & 0xFF;
+      uint8_t b = pixel & 0xFF;
+      if (a > 0 && a < 255) {
+        r = (uint8_t)fminf(255.0f, (float)r * 255.0f / (float)a);
+        g = (uint8_t)fminf(255.0f, (float)g * 255.0f / (float)a);
+        b = (uint8_t)fminf(255.0f, (float)b * 255.0f / (float)a);
+      }
+      int idx = (y * dim + x) * 4;
+      rgba[idx + 0] = r;
+      rgba[idx + 1] = g;
+      rgba[idx + 2] = b;
+      rgba[idx + 3] = a;
+    }
+  }
+
+  Image img = {
+    .data = rgba,
+    .width = dim,
+    .height = dim,
+    .mipmaps = 1,
+    .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+  };
+  Texture2D tex = LoadTextureFromImage(img);
+  UnloadImage(img);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surf);
+  return tex;
 }
 
-static void draw_text_stroke(Vector2 p0, const char* text, float thickness, Color color, bool filled, Color fill_color) {
-  if (!text || text[0] == '\0') return;
-  Font font = get_app_font();
-  float font_size = fmaxf(thickness * 5.0f, 18.0f);
-
-  Vector2 dim = MeasureTextEx(font, text, font_size, 1.0f);
-  float pad = 6.0f;
-
-  if (filled) {
-    DrawRectangleRec((Rectangle){ p0.x - pad, p0.y - pad, dim.x + pad * 2.0f, dim.y + pad * 2.0f }, fill_color);
-    DrawRectangleLinesEx((Rectangle){ p0.x - pad, p0.y - pad, dim.x + pad * 2.0f, dim.y + pad * 2.0f }, 1.5f, color);
-  } else {
-    DrawRectangleRec((Rectangle){ p0.x - pad, p0.y - pad, dim.x + pad * 2.0f, dim.y + pad * 2.0f }, (Color){ 0, 0, 0, 100 });
+static void update_cairo_text_texture(Stroke* s, float zoom) {
+  if (s->cached_tex.id != 0) {
+    UnloadTexture(s->cached_tex);
+    s->cached_tex = (Texture2D){ 0 };
   }
+  float font_size = s->thickness * zoom;
+  if (font_size < 10.0f) font_size = 10.0f;
+  s->cached_tex = render_cairo_text(s->text, font_size, s->text_bold, s->text_italic, s->color, s->filled, s->fill_color, NULL);
+  s->cached_zoom = zoom;
+  s->cache_dirty = false;
+}
 
-  DrawTextEx(font, text, p0, font_size, 1.0f, color);
+static void update_cairo_badge_texture(Stroke* s, float zoom) {
+  if (s->cached_tex.id != 0) {
+    UnloadTexture(s->cached_tex);
+    s->cached_tex = (Texture2D){ 0 };
+  }
+  float radius = fmaxf(s->thickness * 2.8f, 18.0f) * zoom;
+  float border_w = fmaxf(s->badge_thickness, 1.5f) * zoom;
+  s->cached_tex = render_cairo_badge(s->step_number, radius, border_w, s->color, s->filled, s->fill_color, NULL);
+  s->cached_zoom = zoom;
+  s->cache_dirty = false;
 }
 
 // ── Stroke Rendering (Smooth Bezier & Shapes) ───────────────
@@ -624,14 +838,28 @@ static void render_stroke(const Stroke* stroke, float zoom, Vector2 pan, Color c
     case SHAPE_STEP_BADGE: {
       if (n >= 1) {
         Vector2 p0 = to_screen_coords(stroke->points[0]);
-        draw_step_badge(p0, stroke->step_number, screen_thickness, color, stroke->filled, stroke->fill_color);
+        Stroke* mut_s = (Stroke*)stroke;
+        if (mut_s->cache_dirty || mut_s->cached_tex.id == 0 || fabsf(mut_s->cached_zoom - zoom) > 0.05f) {
+          update_cairo_badge_texture(mut_s, zoom);
+        }
+        if (mut_s->cached_tex.id != 0) {
+          float w = (float)mut_s->cached_tex.width;
+          float h = (float)mut_s->cached_tex.height;
+          DrawTexture(mut_s->cached_tex, (int)roundf(p0.x - w * 0.5f), (int)roundf(p0.y - h * 0.5f), WHITE);
+        }
       }
       break;
     }
     case SHAPE_TEXT: {
       if (n >= 1 && stroke->text) {
         Vector2 p0 = to_screen_coords(stroke->points[0]);
-        draw_text_stroke(p0, stroke->text, screen_thickness, color, stroke->filled, stroke->fill_color);
+        Stroke* mut_s = (Stroke*)stroke;
+        if (mut_s->cache_dirty || mut_s->cached_tex.id == 0 || fabsf(mut_s->cached_zoom - zoom) > 0.05f) {
+          update_cairo_text_texture(mut_s, zoom);
+        }
+        if (mut_s->cached_tex.id != 0) {
+          DrawTexture(mut_s->cached_tex, (int)roundf(p0.x), (int)roundf(p0.y), WHITE);
+        }
       }
       break;
     }
@@ -639,6 +867,9 @@ static void render_stroke(const Stroke* stroke, float zoom, Vector2 pan, Color c
 }
 
 void draw_layer_normal(DrawLayer layer) {
+  rlDrawRenderBatchActive();
+  rlColorMask(true, true, true, false);
+
   StrokeLayer* l = get_layer(layer);
   for (int i = 0; i < l->count; i++) {
     const Stroke* s = &l->strokes[i];
@@ -651,32 +882,46 @@ void draw_layer_normal(DrawLayer layer) {
     DrawLayer active_layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
     if (layer == active_layer) {
       Vector2 sp = to_screen_coords(g_state->text_edit_world_pos);
-      Font font = get_app_font();
-      float font_size = fmaxf(g_state->tool_pen_size * 5.0f, 18.0f);
-      Color c = g_configuration->draw_color;
+      float font_size = g_state->text_font_size;
+      Color c = g_state->shape_border_color;
       Color fc = g_state->fill_color;
       fc.a = (unsigned char)(g_state->shape_fill_opacity * 255.0f);
 
-      Vector2 dim = MeasureTextEx(font, g_state->text_buffer, font_size, 1.0f);
-      float pad = 6.0f;
-      float w = fmaxf(dim.x, 20.0f);
-      float h = fmaxf(dim.y, font_size);
+      static Texture2D s_live_tex = { 0 };
+      static char      s_last_live_buf[1024] = { 0 };
+      static float     s_last_live_sz = 0;
+      static bool      s_last_live_bold = false;
+      static bool      s_last_live_italic = false;
+      static Vector2   s_last_live_dim = { 0 };
 
-      DrawRectangleRec((Rectangle){ sp.x - pad, sp.y - pad, w + pad * 2.0f, h + pad * 2.0f },
-                       g_state->shape_filled ? fc : (Color){ 0, 0, 0, 160 });
-      DrawRectangleLinesEx((Rectangle){ sp.x - pad, sp.y - pad, w + pad * 2.0f, h + pad * 2.0f },
-                           1.5f, (Color){ 80, 140, 220, 255 });
+      if (s_live_tex.id == 0 || strcmp(s_last_live_buf, g_state->text_buffer) != 0 ||
+          s_last_live_sz != font_size || s_last_live_bold != g_state->text_bold ||
+          s_last_live_italic != g_state->text_italic) {
+        if (s_live_tex.id != 0) UnloadTexture(s_live_tex);
+        s_live_tex = render_cairo_text(g_state->text_buffer, font_size, g_state->text_bold, g_state->text_italic, c, g_state->shape_filled, fc, &s_last_live_dim);
+        strncpy(s_last_live_buf, g_state->text_buffer, sizeof(s_last_live_buf) - 1);
+        s_last_live_sz = font_size;
+        s_last_live_bold = g_state->text_bold;
+        s_last_live_italic = g_state->text_italic;
+      }
 
-      DrawTextEx(font, g_state->text_buffer, sp, font_size, 1.0f, c);
+      if (s_live_tex.id != 0) {
+        DrawTexture(s_live_tex, (int)roundf(sp.x), (int)roundf(sp.y), WHITE);
+      }
+
+      DrawRectangleLinesEx((Rectangle){ sp.x, sp.y, s_last_live_dim.x, s_last_live_dim.y }, 1.5f, (Color){ 80, 140, 220, 255 });
 
       // Blinking cursor
       if (fmod(GetTime(), 0.8) < 0.4) {
-        float cursor_x = sp.x + dim.x + 2.0f;
-        float cursor_y = sp.y;
+        float cursor_x = sp.x + s_last_live_dim.x - 6.0f;
+        float cursor_y = sp.y + 4.0f;
         DrawLineEx((Vector2){ cursor_x, cursor_y }, (Vector2){ cursor_x, cursor_y + font_size }, 2.0f, (Color){ 255, 255, 255, 240 });
       }
     }
   }
+
+  rlDrawRenderBatchActive();
+  rlColorMask(true, true, true, true);
 }
 
 // ── Dot Grid ────────────────────────────────────────────────
@@ -750,6 +995,9 @@ void draw_composite_highlighter(void) {
   unsigned char ha_byte = (unsigned char)(255.0f * HIGHLIGHTER_ALPHA);
   Color tint = { ha_byte, ha_byte, ha_byte, ha_byte };
 
+  rlDrawRenderBatchActive();
+  rlColorMask(true, true, true, false);
+
   BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
   DrawTextureRec(
     s_hl_rt.texture,
@@ -758,13 +1006,12 @@ void draw_composite_highlighter(void) {
     tint
   );
   EndBlendMode();
+
+  rlDrawRenderBatchActive();
+  rlColorMask(true, true, true, true);
 }
 
 // ── Eraser Collision & Hit Testing ──────────────────────────
-
-static inline float ccw(Vector2 a, Vector2 b, Vector2 c) {
-  return (c.y - a.y) * (b.x - a.x) - (b.y - a.y) * (c.x - a.x);
-}
 
 static bool segments_intersect(Vector2 a, Vector2 b, Vector2 c, Vector2 d) {
   return ((ccw(a, c, d) > 0.0f) != (ccw(b, c, d) > 0.0f)) &&
@@ -825,12 +1072,19 @@ static bool stroke_hit_test(const Stroke* stroke, Vector2 p0, Vector2 p1, float 
   if (stroke->type == SHAPE_TRIANGLE && n >= 2) {
     Vector2 a = to_screen_coords(stroke->points[0]);
     Vector2 b = to_screen_coords(stroke->points[1]);
-    Vector2 top = { (a.x + b.x) * 0.5f, fminf(a.y, b.y) };
-    Vector2 bl  = { fminf(a.x, b.x), fmaxf(a.y, b.y) };
-    Vector2 br  = { fmaxf(a.x, b.x), fmaxf(a.y, b.y) };
-    if (dist_segment_to_segment(p0, p1, top, bl) < threshold) return true;
-    if (dist_segment_to_segment(p0, p1, bl, br) < threshold) return true;
-    if (dist_segment_to_segment(p0, p1, br, top) < threshold) return true;
+    Vector2 dir = Vector2Subtract(b, a);
+    float h = Vector2Length(dir);
+    if (h >= 1.0f) {
+      Vector2 u = Vector2Scale(dir, 1.0f / h);
+      Vector2 norm = (Vector2){ -u.y, u.x };
+      float half_base = h * 0.57735f;
+      Vector2 apex = b;
+      Vector2 bl   = Vector2Add(a, Vector2Scale(norm, half_base));
+      Vector2 br   = Vector2Subtract(a, Vector2Scale(norm, half_base));
+      if (dist_segment_to_segment(p0, p1, apex, bl) < threshold) return true;
+      if (dist_segment_to_segment(p0, p1, bl, br) < threshold) return true;
+      if (dist_segment_to_segment(p0, p1, br, apex) < threshold) return true;
+    }
   }
 
   if (stroke->type == SHAPE_CIRCLE && n >= 2) {
@@ -844,7 +1098,7 @@ static bool stroke_hit_test(const Stroke* stroke, Vector2 p0, Vector2 p1, float 
 
   if (stroke->type == SHAPE_STEP_BADGE && n >= 1) {
     Vector2 sp = to_screen_coords(stroke->points[0]);
-    float badge_r = fmaxf(stroke_radius * 1.6f, 16.0f);
+    float badge_r = fmaxf(stroke->thickness * zoom * 2.8f, 18.0f);
     if (dist_to_segment(sp, p0, p1) < badge_r + eraser_radius) return true;
   }
 
@@ -923,7 +1177,7 @@ void handle_draw(void) {
     if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || g_tablet.pen_just_pressed) {
       Vector2 pos = get_cursor_screen_pos();
       DrawLayer layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
-      stroke_begin(layer, TOOL_STEP_BADGE, SHAPE_STEP_BADGE, g_state->tool_pen_size, g_configuration->draw_color);
+      stroke_begin(layer, TOOL_STEP_BADGE, SHAPE_STEP_BADGE, g_state->shape_thickness, g_state->shape_border_color);
       stroke_add_point(to_texture_coords(pos));
       stroke_end();
       g_state->step_badge_counter++;
@@ -948,9 +1202,15 @@ void handle_draw(void) {
       if (g_state->current_tool == TOOL_ERASER) {
         draw_erase(layer, pos, pos, g_state->tool_eraser_size);
       } else {
-        float size = (g_state->current_tool == TOOL_HIGHLIGHTER)
-                     ? g_state->tool_highlighter_size
-                     : g_state->tool_pen_size;
+        float size = g_state->tool_pen_size;
+        Color stroke_color = g_configuration->draw_color;
+        if (g_state->current_tool == TOOL_HIGHLIGHTER) {
+          size = g_state->tool_highlighter_size;
+        } else if (g_state->current_tool >= TOOL_LINE && g_state->current_tool <= TOOL_TABLE) {
+          size = g_state->shape_thickness;
+          stroke_color = g_state->shape_border_color;
+        }
+
         ShapeType shape = SHAPE_FREEHAND;
         if (g_state->current_tool == TOOL_LINE) shape = SHAPE_LINE;
         else if (g_state->current_tool == TOOL_ARROW) shape = SHAPE_ARROW;
@@ -959,7 +1219,7 @@ void handle_draw(void) {
         else if (g_state->current_tool == TOOL_CIRCLE) shape = SHAPE_CIRCLE;
         else if (g_state->current_tool == TOOL_TABLE) shape = SHAPE_TABLE;
 
-        stroke_begin(layer, g_state->current_tool, shape, size, g_configuration->draw_color);
+        stroke_begin(layer, g_state->current_tool, shape, size, stroke_color);
         stroke_add_point(to_texture_coords(pos));
         if (shape != SHAPE_FREEHAND) {
           // Add second point for shape live preview
@@ -985,14 +1245,18 @@ void handle_draw(void) {
               float sz = fmaxf(fabsf(dx), fabsf(dy));
               world_pos.x = p0.x + (dx >= 0 ? sz : -sz);
               world_pos.y = p0.y + (dy >= 0 ? sz : -sz);
-            } else if (s_active_stroke->type == SHAPE_LINE || s_active_stroke->type == SHAPE_ARROW) {
+            } else if (s_active_stroke->type == SHAPE_LINE ||
+                       s_active_stroke->type == SHAPE_ARROW ||
+                       s_active_stroke->type == SHAPE_TRIANGLE) {
               float dx = world_pos.x - p0.x;
               float dy = world_pos.y - p0.y;
-              float angle = atan2f(dy, dx);
-              float snap = roundf(angle / (PI * 0.25f)) * (PI * 0.25f);
               float dist = sqrtf(dx * dx + dy * dy);
-              world_pos.x = p0.x + cosf(snap) * dist;
-              world_pos.y = p0.y + sinf(snap) * dist;
+              if (dist > 0.001f) {
+                float angle = atan2f(dy, dx);
+                float snap = roundf(angle / (PI * 0.25f)) * (PI * 0.25f);
+                world_pos.x = p0.x + cosf(snap) * dist;
+                world_pos.y = p0.y + sinf(snap) * dist;
+              }
             }
           }
           if (s_active_stroke->points_count >= 2) {

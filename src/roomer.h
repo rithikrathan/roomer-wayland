@@ -10,6 +10,7 @@
 #include <raylib.h>
 #include <raymath.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdnoreturn.h>
@@ -74,8 +75,15 @@ typedef struct {
   Color       fill_color;
   int         step_number;
   char*       text;
+  bool        text_bold;
+  bool        text_italic;
+  float       badge_thickness;
   int         table_rows;
   int         table_cols;
+  // Cairo rasterized texture cache
+  Texture2D   cached_tex;
+  float       cached_zoom;
+  bool        cache_dirty;
 } Stroke;
 
 typedef struct {
@@ -109,7 +117,13 @@ typedef struct {
   float       shape_dash_gap;
   bool        shape_filled;
   float       shape_fill_opacity;
+  Color       shape_border_color;
   Color       fill_color;
+  float       shape_thickness;
+  float       badge_border_thickness;
+  bool        text_bold;
+  bool        text_italic;
+  float       text_font_size;
   int         step_badge_counter;
   int         table_rows;
   int         table_cols;
@@ -118,6 +132,7 @@ typedef struct {
   char        text_buffer[1024];
   int         text_cursor;
 } State;
+
 
 typedef struct {
   char* program_name;
@@ -162,6 +177,10 @@ void handle_draw(void);
 Vector2 get_cursor_screen_pos(void);
 extern const char* g_flashlight_frag_shader_source;
 void app_render_frame(Texture2D img_texture, Shader flashlight_shader, int loc_center, int loc_radius, int loc_darkness, int loc_texture);
+
+// Raylib low-level OpenGL state functions
+void rlColorMask(bool r, bool g, bool b, bool a);
+void rlDrawRenderBatchActive(void);
 
 // Unified Drawing System
 void draw_layer_normal(DrawLayer layer);
