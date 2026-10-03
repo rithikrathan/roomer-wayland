@@ -275,6 +275,7 @@ int daemon_server_run(void) {
             if (is_visible) {
               SetWindowState(FLAG_WINDOW_HIDDEN);
               is_visible = false;
+              reset_all_variables(false);
             } else {
               ClearWindowState(FLAG_WINDOW_HIDDEN);
               SetWindowFocused();

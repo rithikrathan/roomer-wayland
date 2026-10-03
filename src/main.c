@@ -123,6 +123,7 @@ void app_render_frame(Texture2D img_texture, Shader flashlight_shader, int loc_c
   toolbox_render();
   keymaps_render();
   draw_size_indicator();
+  hud_tooltip_render();
   EndDrawing();
 }
 

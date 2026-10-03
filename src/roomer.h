@@ -231,6 +231,7 @@ void polygon_cancel(void);
 void polygon_commit(void);
 void polygon_pop_last_point(void);
 void toggle_hide_overlay(void);
+void reset_all_variables(bool clear_drawings);
 void badge_step_number_to_string(int num, BadgeMode mode, const char* custom, char* out, size_t out_sz);
 Font get_app_font(void);
 
@@ -257,6 +258,9 @@ Color open_color_picker(Color current);
 
 void draw_size_indicator(void);
 void keymaps_render(void);
+void hud_tooltip_show(const char* text);
+void hud_tooltip_render(void);
+void tool_notify_current(void);
 
 #define HIGHLIGHTER_ALPHA 0.3f
 

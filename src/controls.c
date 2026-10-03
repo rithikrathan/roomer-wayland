@@ -130,7 +130,14 @@ void handle_inputs(void) {
     return;
   }
 
+  // Delete key resets all variables to initial values
+  if (!g_state->is_editing_text && !g_state->is_editing_badge_text && IsKeyPressed(KEY_DELETE)) {
+    reset_all_variables(true);
+    return;
+  }
+
   if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) {
+    reset_all_variables(true);
     g_state->should_quit = true;
     return;
   }
@@ -144,61 +151,26 @@ void handle_inputs(void) {
   handle_draw();
 }
 
+void reset_all_variables(bool clear_drawings) {
+  int w = g_state->image_w;
+  int h = g_state->image_h;
+  polygon_cancel();
+  text_cancel_current();
+  if (clear_drawings) {
+    draw_clear_all();
+  }
+  *g_state = g_initial_state;
+  g_state->image_w = w;
+  g_state->image_h = h;
+  g_configuration->draw_color = g_state->color1;
+  hud_tooltip_show(clear_drawings ? "Reset All (Initial State)" : "Variables Reinitialized");
+}
+
 static void handle_reset(void) {
   bool ctrl  = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-  if ((shift && IsKeyPressed(KEY_ZERO)) || (ctrl && IsKeyPressed(KEY_R))) {
-    bool      saved_toolbox        = g_state->toolbox_open;
-    ToolType  saved_tool           = g_state->current_tool;
-    float     saved_pen_size       = g_state->tool_pen_size;
-    float     saved_eraser_size    = g_state->tool_eraser_size;
-    float     saved_hl_size        = g_state->tool_highlighter_size;
-    Color     saved_color1         = g_state->color1;
-    Color     saved_color2         = g_state->color2;
-    int       saved_active         = g_state->active_swatch;
-    float     saved_shape_thick    = g_state->shape_thickness;
-    float     saved_badge_thick    = g_state->badge_border_thickness;
-    float     saved_badge_sz       = g_state->badge_size;
-    BadgeMode saved_badge_mode     = g_state->badge_mode;
-    int       saved_ngon_sides     = g_state->ngon_sides;
-    char      saved_badge_txt[16];
-    strncpy(saved_badge_txt, g_state->badge_custom_text, sizeof(saved_badge_txt));
-    Color     saved_shape_col      = g_state->shape_border_color;
-    Color     saved_fill_col       = g_state->fill_color;
-    float     saved_fill_op        = g_state->shape_fill_opacity;
-    bool      saved_filled         = g_state->shape_filled;
-    StrokeStyle saved_style        = g_state->shape_stroke_style;
-    float     saved_font_sz        = g_state->text_font_size;
-    bool      saved_bold           = g_state->text_bold;
-    bool      saved_italic         = g_state->text_italic;
-
-    *g_state            = g_initial_state;
-    s_flashlight_manual = false;
-    draw_clear_all();
-
-    g_state->toolbox_open          = saved_toolbox;
-    g_state->current_tool          = saved_tool;
-    g_state->tool_pen_size         = saved_pen_size;
-    g_state->tool_eraser_size      = saved_eraser_size;
-    g_state->tool_highlighter_size = saved_hl_size;
-    g_state->color1                = saved_color1;
-    g_state->color2                = saved_color2;
-    g_state->active_swatch         = saved_active;
-    g_state->shape_thickness       = saved_shape_thick;
-    g_state->badge_border_thickness= saved_badge_thick;
-    g_state->badge_size            = saved_badge_sz;
-    g_state->badge_mode            = saved_badge_mode;
-    g_state->ngon_sides            = saved_ngon_sides;
-    strncpy(g_state->badge_custom_text, saved_badge_txt, sizeof(g_state->badge_custom_text));
-    g_state->shape_border_color    = saved_shape_col;
-    g_state->fill_color            = saved_fill_col;
-    g_state->shape_fill_opacity    = saved_fill_op;
-    g_state->shape_filled          = saved_filled;
-    g_state->shape_stroke_style    = saved_style;
-    g_state->text_font_size        = saved_font_sz;
-    g_state->text_bold             = saved_bold;
-    g_state->text_italic           = saved_italic;
-    g_configuration->draw_color    = saved_active ? saved_color2 : saved_color1;
+  if (IsKeyPressed(KEY_DELETE) || (shift && IsKeyPressed(KEY_ZERO)) || (ctrl && IsKeyPressed(KEY_R))) {
+    reset_all_variables(true);
   }
 }
 
@@ -212,21 +184,40 @@ static void handle_fit(void) {
   }
 }
 
+static Vector2 s_last_tablet_pos     = { 0 };
+static bool    s_has_last_tablet_pos = false;
+
 static void handle_panning(void) {
   if (g_state->is_drawing) return;
-  if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
 
   bool mouse_pan = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-  bool pen_pan   = g_tablet.present && g_tablet.button1;
+  bool pen_button = g_tablet.present && (g_tablet.button1 || g_tablet.button2 || g_tablet.button3);
 
-  // Block mouse pan while pen is touching (pen draws, doesn't pan)
-  if (mouse_pan && g_tablet.present && g_tablet.touching) return;
+  // Block mouse pan if pen is touching without barrel button (pen draws, doesn't pan)
+  if (mouse_pan && g_tablet.present && g_tablet.touching && !pen_button) return;
 
-  if (!mouse_pan && !pen_pan) return;
+  // If not pressing pen button, don't pan when over toolbox
+  if (!pen_button && g_state->toolbox_open && toolbox_is_mouse_over()) return;
 
-  Vector2 mouse_delta    = GetMouseDelta();
-  g_state->target_pan.x += mouse_delta.x;
-  g_state->target_pan.y += mouse_delta.y;
+  if (!mouse_pan && !pen_button) {
+    s_has_last_tablet_pos = false;
+    return;
+  }
+
+  if (pen_button) {
+    Vector2 cur_pos = get_cursor_screen_pos();
+    if (s_has_last_tablet_pos) {
+      Vector2 delta = { cur_pos.x - s_last_tablet_pos.x, cur_pos.y - s_last_tablet_pos.y };
+      g_state->target_pan.x += delta.x;
+      g_state->target_pan.y += delta.y;
+    }
+    s_last_tablet_pos = cur_pos;
+    s_has_last_tablet_pos = true;
+  } else if (mouse_pan) {
+    Vector2 mouse_delta    = GetMouseDelta();
+    g_state->target_pan.x += mouse_delta.x;
+    g_state->target_pan.y += mouse_delta.y;
+  }
 }
 
 static void handle_zoom(void) {
@@ -261,7 +252,7 @@ static void handle_tablet_zoom(void) {
   if (!g_tablet.present) return;
 
   bool ctrl    = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-  bool zoom_on = (ctrl && g_tablet.touching) || g_tablet.button2;
+  bool zoom_on = ctrl && (g_tablet.touching || g_tablet.button1 || g_tablet.button2 || g_tablet.button3);
 
   if (zoom_on) {
     if (!s_tab_zoom_active) {
@@ -432,6 +423,104 @@ void draw_size_indicator(void) {
   }
 }
 
+// ── HUD Tooltip Notification ────────────────────────────────
+
+static char   s_hud_text[64] = { 0 };
+static double s_hud_time     = -10.0;
+
+void hud_tooltip_show(const char* text) {
+  if (!text) return;
+  strncpy(s_hud_text, text, sizeof(s_hud_text) - 1);
+  s_hud_text[sizeof(s_hud_text) - 1] = '\0';
+  s_hud_time = GetTime();
+}
+
+void tool_notify_current(void) {
+  char buf[64];
+  const char* style_str = (g_state->shape_stroke_style == STYLE_DASHED) ? "Dashed" :
+                          (g_state->shape_stroke_style == STYLE_DOTTED) ? "Dotted" : "Solid";
+  switch (g_state->current_tool) {
+    case TOOL_PEN:
+      snprintf(buf, sizeof(buf), "Pen");
+      break;
+    case TOOL_HIGHLIGHTER:
+      snprintf(buf, sizeof(buf), "Highlighter");
+      break;
+    case TOOL_ERASER:
+      snprintf(buf, sizeof(buf), "Eraser");
+      break;
+    case TOOL_LINE:
+      snprintf(buf, sizeof(buf), "Straight Line (%s)", style_str);
+      break;
+    case TOOL_ARROW:
+      snprintf(buf, sizeof(buf), "Arrow (%s)", style_str);
+      break;
+    case TOOL_POLYGON:
+      snprintf(buf, sizeof(buf), "Polygon Tool (%s)", style_str);
+      break;
+    case TOOL_NGON:
+      snprintf(buf, sizeof(buf), "%d-Gon Tool (%s)", g_state->ngon_sides, style_str);
+      break;
+    case TOOL_CIRCLE:
+      snprintf(buf, sizeof(buf), "Circle (%s)", style_str);
+      break;
+    case TOOL_TABLE:
+      snprintf(buf, sizeof(buf), "Table Tool %dx%d (%s)", g_state->table_rows, g_state->table_cols, style_str);
+      break;
+    case TOOL_STEP_BADGE:
+      if (g_state->badge_mode == BADGE_MODE_NUMERIC)
+        snprintf(buf, sizeof(buf), "Step Badge (#%d)", g_state->step_badge_counter);
+      else if (g_state->badge_mode == BADGE_MODE_ALPHA_UPPER)
+        snprintf(buf, sizeof(buf), "Step Badge (A..Z)");
+      else if (g_state->badge_mode == BADGE_MODE_ALPHA_LOWER)
+        snprintf(buf, sizeof(buf), "Step Badge (a..z)");
+      else
+        snprintf(buf, sizeof(buf), "Step Badge (Custom)");
+      break;
+    case TOOL_TEXT:
+      snprintf(buf, sizeof(buf), "Text Tool");
+      break;
+    default:
+      snprintf(buf, sizeof(buf), "Tool Selected");
+      break;
+  }
+  hud_tooltip_show(buf);
+}
+
+void hud_tooltip_render(void) {
+  double elapsed = GetTime() - s_hud_time;
+  if (elapsed < 0.0 || elapsed > 1.4) return;
+
+  float alpha = 1.0f;
+  if (elapsed > 0.95) {
+    alpha = (float)(1.0 - (elapsed - 0.95) / 0.45);
+    if (alpha < 0.0f) alpha = 0.0f;
+  }
+
+  Font font = get_app_font();
+  float font_size = 18.0f;
+  Vector2 text_dim = MeasureTextEx(font, s_hud_text, font_size, 1.0f);
+
+  float pad_x = 18.0f;
+  float pad_y = 9.0f;
+  float box_w = text_dim.x + pad_x * 2.0f;
+  float box_h = text_dim.y + pad_y * 2.0f;
+  float sw = (float)GetScreenWidth();
+  float box_x = (sw - box_w) * 0.5f;
+  float box_y = 28.0f;
+
+  Rectangle rec = { box_x, box_y, box_w, box_h };
+  Color bg_col     = { 22, 22, 28, (unsigned char)(235.0f * alpha) };
+  Color border_col = { 80, 145, 230, (unsigned char)(210.0f * alpha) };
+  Color text_col   = { 250, 250, 250, (unsigned char)(255.0f * alpha) };
+
+  DrawRectangleRounded(rec, 0.45f, 16, bg_col);
+  DrawRectangleRoundedLinesEx(rec, 0.45f, 16, 1.5f, border_col);
+
+  Vector2 text_pos = { box_x + pad_x, box_y + pad_y };
+  DrawTextEx(font, s_hud_text, text_pos, font_size, 1.0f, text_col);
+}
+
 static void handle_toolbox(void) {
   bool ctrl  = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
@@ -439,6 +528,7 @@ static void handle_toolbox(void) {
   // Ctrl+F toggles fill on last shape or default fill mode
   if (ctrl && IsKeyPressed(KEY_F)) {
     stroke_toggle_fill_last();
+    hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF");
     return;
   }
 
@@ -446,10 +536,16 @@ static void handle_toolbox(void) {
   if (IsKeyPressed(KEY_LEFT_BRACKET)) {
     g_state->shape_dash_len = fmaxf(4.0f, g_state->shape_dash_len - 2.0f);
     g_state->shape_dash_gap = fmaxf(2.0f, g_state->shape_dash_gap - 1.0f);
+    char dbuf[32];
+    snprintf(dbuf, sizeof(dbuf), "Dash Spacing: %.0fpx", g_state->shape_dash_gap);
+    hud_tooltip_show(dbuf);
   }
   if (IsKeyPressed(KEY_RIGHT_BRACKET)) {
     g_state->shape_dash_len = fminf(40.0f, g_state->shape_dash_len + 2.0f);
     g_state->shape_dash_gap = fminf(30.0f, g_state->shape_dash_gap + 1.0f);
+    char dbuf[32];
+    snprintf(dbuf, sizeof(dbuf), "Dash Spacing: %.0fpx", g_state->shape_dash_gap);
+    hud_tooltip_show(dbuf);
   }
 
   if (IsKeyPressed(KEY_C)) {
@@ -459,12 +555,17 @@ static void handle_toolbox(void) {
   if (IsKeyPressed(KEY_X)) {
     g_state->active_swatch      = !g_state->active_swatch;
     g_configuration->draw_color = g_state->active_swatch ? g_state->color2 : g_state->color1;
+    hud_tooltip_show(g_state->active_swatch ? "Color 2 Active" : "Color 1 Active");
   }
-  if (IsKeyPressed(KEY_B)) g_state->black_board_enabled = !g_state->black_board_enabled;
+  if (IsKeyPressed(KEY_B)) {
+    g_state->black_board_enabled = !g_state->black_board_enabled;
+    hud_tooltip_show(g_state->black_board_enabled ? "Blackboard: ON" : "Blackboard: OFF");
+  }
 
   // Minus key pops step badge if step badge tool is active
   if (!ctrl && IsKeyPressed(KEY_MINUS) && g_state->current_tool == TOOL_STEP_BADGE) {
     step_badge_pop_last();
+    hud_tooltip_show("Popped Badge");
   }
 
   // Tool 1: Pen / Highlighter (Shift+1)
@@ -476,12 +577,14 @@ static void handle_toolbox(void) {
       g_state->current_tool = TOOL_PEN;
       if (g_state->tool_pen_size > 8.0F) g_state->tool_pen_size = 8.0F;
     }
+    tool_notify_current();
   }
 
   // Tool 2: Eraser
   if (IsKeyPressed(KEY_TWO)) {
     polygon_cancel();
     g_state->current_tool = TOOL_ERASER;
+    tool_notify_current();
   }
 
   // Tool 3: Straight Line
@@ -493,6 +596,7 @@ static void handle_toolbox(void) {
       g_state->current_tool = TOOL_LINE;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
+    tool_notify_current();
   }
 
   // Tool 4: Arrow
@@ -504,6 +608,7 @@ static void handle_toolbox(void) {
       g_state->current_tool = TOOL_ARROW;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
+    tool_notify_current();
   }
 
   // Tool 5: Polygon
@@ -515,6 +620,7 @@ static void handle_toolbox(void) {
       g_state->current_tool = TOOL_POLYGON;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
+    tool_notify_current();
   }
 
   // Tool 6: N-Gon
@@ -526,6 +632,7 @@ static void handle_toolbox(void) {
       g_state->current_tool = TOOL_NGON;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
+    tool_notify_current();
   }
 
   // Tool 7: Circle
@@ -537,18 +644,21 @@ static void handle_toolbox(void) {
       g_state->current_tool = TOOL_CIRCLE;
       g_state->shape_stroke_style = shift ? STYLE_DASHED : STYLE_SOLID;
     }
+    tool_notify_current();
   }
 
   // Tool 8: Step Badge
   if (IsKeyPressed(KEY_EIGHT)) {
     polygon_cancel();
     g_state->current_tool = TOOL_STEP_BADGE;
+    tool_notify_current();
   }
 
   // Tool 9: Text
   if (IsKeyPressed(KEY_NINE)) {
     polygon_cancel();
     g_state->current_tool = TOOL_TEXT;
+    tool_notify_current();
   }
 
   // Tool 0: Table (plain 0 without shift/ctrl)
@@ -560,6 +670,7 @@ static void handle_toolbox(void) {
       g_state->current_tool = TOOL_TABLE;
       g_state->shape_stroke_style = STYLE_SOLID;
     }
+    tool_notify_current();
   }
 
   handle_size_keys();

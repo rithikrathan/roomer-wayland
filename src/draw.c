@@ -255,6 +255,7 @@ void toggle_hide_overlay(void) {
   } else {
     SetWindowState(FLAG_WINDOW_HIDDEN);
     g_state->hide_overlay = true;
+    reset_all_variables(false);
   }
 }
 
@@ -1428,9 +1429,16 @@ void handle_draw(void) {
   if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
   if (g_state->keymaps_open) return;
 
+  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+  bool pen_btn = g_tablet.present && (g_tablet.button1 || g_tablet.button2 || g_tablet.button3);
+  bool pen_click = g_tablet.pen_just_pressed && !pen_btn && !ctrl;
+  bool pen_down = g_tablet.logical_pen_down && !pen_btn && !ctrl;
+  bool right_click = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || pen_click;
+  bool right_held = IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || pen_down;
+
   // Text tool click placement (STRICTLY Right-click or tablet pen)
   if (g_state->current_tool == TOOL_TEXT) {
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || g_tablet.pen_just_pressed) {
+    if (right_click) {
       Vector2 pos = get_cursor_screen_pos();
       text_commit_current();
       g_state->is_editing_text = true;
@@ -1443,14 +1451,14 @@ void handle_draw(void) {
 
   // If we were editing text and clicked elsewhere with right click, commit text
   if (g_state->is_editing_text) {
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || g_tablet.pen_just_pressed) {
+    if (right_click) {
       text_commit_current();
     }
   }
 
   // Step badge click placement (STRICTLY Right-click or tablet pen)
   if (g_state->current_tool == TOOL_STEP_BADGE) {
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || g_tablet.pen_just_pressed) {
+    if (right_click) {
       Vector2 pos = get_cursor_screen_pos();
       DrawLayer layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
       stroke_begin(layer, TOOL_STEP_BADGE, SHAPE_STEP_BADGE, g_state->shape_thickness, g_state->shape_border_color);
@@ -1465,7 +1473,7 @@ void handle_draw(void) {
 
   // Polygon point placement (STRICTLY Right-click or tablet pen)
   if (g_state->current_tool == TOOL_POLYGON) {
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || g_tablet.pen_just_pressed) {
+    if (right_click) {
       Vector2 spos = get_cursor_screen_pos();
       Vector2 wpos = to_texture_coords(spos);
 
@@ -1514,10 +1522,7 @@ void handle_draw(void) {
 
   // Regular drawing (Pen, Eraser, Highlighter, Line, Arrow, Ngon, Circle, Table)
   // Left-click is STRICTLY PAN ONLY! Drawing is STRICTLY Right-click or tablet pen!
-  bool ctrl        = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-  bool right_held  = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
-  bool pen_down    = g_tablet.logical_pen_down && !g_tablet.button1 && !g_tablet.button2 && !g_tablet.button3 && !ctrl;
-  bool should_draw = right_held || pen_down;
+  bool should_draw = right_held;
 
   Vector2 pos   = get_cursor_screen_pos();
   DrawLayer layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;

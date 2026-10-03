@@ -10,6 +10,14 @@
 #include "polygon_png.h"
 #include "ngon_png.h"
 #include "swap_png.h"
+#include "solid_png.h"
+#include "dashed_png.h"
+#include "dotted_png.h"
+#include "fill_png.h"
+#include "reset_png.h"
+#include "pop_png.h"
+#include "plus_png.h"
+#include "minus_png.h"
 #include "circle_png.h"
 #include "table_png.h"
 #include "badge_png.h"
@@ -54,6 +62,14 @@ static Texture2D arrow_tex = { 0 };
 static Texture2D poly_tex  = { 0 };
 static Texture2D ngon_tex  = { 0 };
 static Texture2D swap_tex  = { 0 };
+static Texture2D solid_tex = { 0 };
+static Texture2D dash_tex  = { 0 };
+static Texture2D dots_tex  = { 0 };
+static Texture2D fill_tex  = { 0 };
+static Texture2D reset_tex = { 0 };
+static Texture2D pop_tex   = { 0 };
+static Texture2D plus_tex  = { 0 };
+static Texture2D minus_tex = { 0 };
 static Texture2D circ_tex  = { 0 };
 static Texture2D table_tex = { 0 };
 static Texture2D badge_tex = { 0 };
@@ -85,6 +101,14 @@ static void load_assets(void) {
   poly_tex  = load_icon_from_mem(assets_polygon_white_png, assets_polygon_white_png_len);
   ngon_tex  = load_icon_from_mem(assets_ngon_white_png, assets_ngon_white_png_len);
   swap_tex  = load_icon_from_mem(assets_swap_white_png, assets_swap_white_png_len);
+  solid_tex = load_icon_from_mem(assets_solid_white_png, assets_solid_white_png_len);
+  dash_tex  = load_icon_from_mem(assets_dashed_white_png, assets_dashed_white_png_len);
+  dots_tex  = load_icon_from_mem(assets_dotted_white_png, assets_dotted_white_png_len);
+  fill_tex  = load_icon_from_mem(assets_fill_white_png, assets_fill_white_png_len);
+  reset_tex = load_icon_from_mem(assets_reset_white_png, assets_reset_white_png_len);
+  pop_tex   = load_icon_from_mem(assets_pop_white_png, assets_pop_white_png_len);
+  plus_tex  = load_icon_from_mem(assets_plus_white_png, assets_plus_white_png_len);
+  minus_tex = load_icon_from_mem(assets_minus_white_png, assets_minus_white_png_len);
   circ_tex  = load_icon_from_mem(assets_circle_white_png, assets_circle_white_png_len);
   table_tex = load_icon_from_mem(assets_table_white_png, assets_table_white_png_len);
   badge_tex = load_icon_from_mem(assets_badge_white_png, assets_badge_white_png_len);
@@ -144,7 +168,7 @@ typedef struct {
 static TooltipState s_tip = { 0 };
 
 static void update_tooltip(const char* label, Rectangle btn_rect) {
-  Vector2 m = GetMousePosition();
+  Vector2 m = get_cursor_screen_pos();
   bool hit = CheckCollisionPointRec(m, btn_rect);
   if (!hit) {
     if (s_tip.hovering && s_tip.label == label) s_tip.hovering = false;
@@ -182,7 +206,7 @@ static void draw_tooltip_if_hovering(void) {
 void toolbox_toggle(void) {
   g_state->toolbox_open = !g_state->toolbox_open;
   if (g_state->toolbox_open) {
-    Vector2 m = GetMousePosition();
+    Vector2 m = get_cursor_screen_pos();
     float bw = BOX_W;
     float bh = box_height();
     s_popup_pos.x = m.x - bw / 2;
@@ -202,7 +226,7 @@ bool toolbox_is_open(void) {
 
 bool toolbox_is_mouse_over(void) {
   if (!g_state->toolbox_open) return false;
-  return CheckCollisionPointRec(GetMousePosition(), (Rectangle){ s_popup_pos.x, s_popup_pos.y, BOX_W, box_height() });
+  return CheckCollisionPointRec(get_cursor_screen_pos(), (Rectangle){ s_popup_pos.x, s_popup_pos.y, BOX_W, box_height() });
 }
 
 // ── Sliders / Dragging State ────────────────────────────────
@@ -278,10 +302,13 @@ void toolbox_handle_input(void) {
   if (!g_state->toolbox_open) return;
   load_assets();
 
-  Vector2 m = GetMousePosition();
+  Vector2 m = get_cursor_screen_pos();
   bool in_box = CheckCollisionPointRec(m, (Rectangle){ s_popup_pos.x, s_popup_pos.y, BOX_W, box_height() });
-  bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT) || g_tablet.logical_pen_down;
-  bool mouse_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || g_tablet.pen_just_pressed;
+  bool pen_btn = g_tablet.present && (g_tablet.button1 || g_tablet.button2 || g_tablet.button3);
+  bool pen_down_ui = g_tablet.logical_pen_down && !pen_btn;
+  bool pen_pressed_ui = g_tablet.pen_just_pressed && !pen_btn;
+  bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT) || pen_down_ui;
+  bool mouse_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || pen_pressed_ui;
 
   // Active drags
   if (s_dragging_size) {
@@ -377,24 +404,24 @@ void toolbox_handle_input(void) {
 
   // Row 0: [Pen] [Eraser] [HL] [Board]
   float r0 = row_y(0);
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r0, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_PEN; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r0, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_ERASER; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r0, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_HIGHLIGHTER; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r0, COLS_4_W, ROW_H })) { g_state->black_board_enabled = !g_state->black_board_enabled; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r0, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_PEN; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r0, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_ERASER; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r0, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_HIGHLIGHTER; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r0, COLS_4_W, ROW_H })) { g_state->black_board_enabled = !g_state->black_board_enabled; hud_tooltip_show(g_state->black_board_enabled ? "Blackboard: ON" : "Blackboard: OFF"); return; }
 
   // Row 1: [Line] [Arrow] [Polygon] [N-Gon]
   float r1 = row_y(1);
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_LINE; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_ARROW; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_POLYGON; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_NGON; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_LINE; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_ARROW; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_POLYGON; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r1, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_NGON; tool_notify_current(); return; }
 
   // Row 2: [Circle] [Table] [Step Badge] [Text]
   float r2 = row_y(2);
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_CIRCLE; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_TABLE; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_STEP_BADGE; return; }
-  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_TEXT; return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_CIRCLE; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_TABLE; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_STEP_BADGE; tool_notify_current(); return; }
+  if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r2, COLS_4_W, ROW_H })) { polygon_cancel(); g_state->current_tool = TOOL_TEXT; tool_notify_current(); return; }
 
   // ── Contextual Rows 3, 4, 5 ───────────────────────────────
   float r3 = row_y(3);
@@ -491,21 +518,25 @@ void toolbox_handle_input(void) {
     if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r3, b_w, ROW_H })) {
       g_state->badge_mode = BADGE_MODE_NUMERIC;
       g_state->is_editing_badge_text = false;
+      tool_notify_current();
       return;
     }
     if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r3, b_w, ROW_H })) {
       g_state->badge_mode = BADGE_MODE_ALPHA_UPPER;
       g_state->is_editing_badge_text = false;
+      tool_notify_current();
       return;
     }
     if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r3, b_w, ROW_H })) {
       g_state->badge_mode = BADGE_MODE_ALPHA_LOWER;
       g_state->is_editing_badge_text = false;
+      tool_notify_current();
       return;
     }
     if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r3, b_w, ROW_H })) {
       g_state->badge_mode = BADGE_MODE_CUSTOM;
       g_state->is_editing_badge_text = true;
+      tool_notify_current();
       return;
     }
 
@@ -536,10 +567,12 @@ void toolbox_handle_input(void) {
       float r_x = s_popup_pos.x + BOX_PAD + 156;
       if (CheckCollisionPointRec(m, (Rectangle){ r_x, r4, 50, ROW_H })) {
         g_state->step_badge_counter = 1;
+        hud_tooltip_show("Badge Counter Reset: #1");
         return;
       }
       if (CheckCollisionPointRec(m, (Rectangle){ r_x + 54, r4, 50, ROW_H })) {
         step_badge_pop_last();
+        hud_tooltip_show("Popped Badge");
         return;
       }
     }
@@ -556,6 +589,7 @@ void toolbox_handle_input(void) {
     }
     if (CheckCollisionPointRec(m, (Rectangle){ bx + 96, r5, 42, ROW_H })) {
       stroke_toggle_fill_last();
+      hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF");
       return;
     }
     float op_x = bx + 144;
@@ -569,14 +603,22 @@ void toolbox_handle_input(void) {
   } else if (cur == TOOL_NGON) {
     // Row 3: Sides counter [ - ] N: %d [ + ] and Style buttons [Solid] [Dash] [Dots] [Fill*]
     float rx0 = s_popup_pos.x + BOX_PAD;
-    if (CheckCollisionPointRec(m, (Rectangle){ rx0, r3, 26, ROW_H }) && g_state->ngon_sides > 3) { g_state->ngon_sides--; return; }
-    if (CheckCollisionPointRec(m, (Rectangle){ rx0 + 58, r3, 26, ROW_H }) && g_state->ngon_sides < 16) { g_state->ngon_sides++; return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ rx0, r3, 26, ROW_H }) && g_state->ngon_sides > 3) {
+      g_state->ngon_sides--;
+      tool_notify_current();
+      return;
+    }
+    if (CheckCollisionPointRec(m, (Rectangle){ rx0 + 58, r3, 26, ROW_H }) && g_state->ngon_sides < 16) {
+      g_state->ngon_sides++;
+      tool_notify_current();
+      return;
+    }
 
     float st_x = rx0 + 88;
-    if (CheckCollisionPointRec(m, (Rectangle){ st_x, r3, 41, ROW_H })) { g_state->shape_stroke_style = STYLE_SOLID; return; }
-    if (CheckCollisionPointRec(m, (Rectangle){ st_x + 44, r3, 41, ROW_H })) { g_state->shape_stroke_style = STYLE_DASHED; return; }
-    if (CheckCollisionPointRec(m, (Rectangle){ st_x + 88, r3, 41, ROW_H })) { g_state->shape_stroke_style = STYLE_DOTTED; return; }
-    if (CheckCollisionPointRec(m, (Rectangle){ st_x + 132, r3, 41, ROW_H })) { stroke_toggle_fill_last(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ st_x, r3, 41, ROW_H })) { g_state->shape_stroke_style = STYLE_SOLID; tool_notify_current(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ st_x + 44, r3, 41, ROW_H })) { g_state->shape_stroke_style = STYLE_DASHED; tool_notify_current(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ st_x + 88, r3, 41, ROW_H })) { g_state->shape_stroke_style = STYLE_DOTTED; tool_notify_current(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ st_x + 132, r3, 41, ROW_H })) { stroke_toggle_fill_last(); hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF"); return; }
 
     // Row 4: Border thickness slider + (Dash/Dot Spacing slider if dashed/dotted)
     bool split = (g_state->shape_stroke_style == STYLE_DASHED || g_state->shape_stroke_style == STYLE_DOTTED);
@@ -612,6 +654,7 @@ void toolbox_handle_input(void) {
     }
     if (CheckCollisionPointRec(m, (Rectangle){ bx + 96, r5, 42, ROW_H })) {
       stroke_toggle_fill_last();
+      hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF");
       return;
     }
     float op_x = bx + 144;
@@ -629,10 +672,12 @@ void toolbox_handle_input(void) {
     float bi_x2 = bi_x1 + bi_w + 4;
     if (CheckCollisionPointRec(m, (Rectangle){ bi_x1, r3, bi_w, ROW_H })) {
       g_state->text_bold = !g_state->text_bold;
+      hud_tooltip_show(g_state->text_bold ? "Bold: ON" : "Bold: OFF");
       return;
     }
     if (CheckCollisionPointRec(m, (Rectangle){ bi_x2, r3, bi_w, ROW_H })) {
       g_state->text_italic = !g_state->text_italic;
+      hud_tooltip_show(g_state->text_italic ? "Italic: ON" : "Italic: OFF");
       return;
     }
 
@@ -657,6 +702,7 @@ void toolbox_handle_input(void) {
     }
     if (CheckCollisionPointRec(m, (Rectangle){ bx + 132, r4, BOX_W - BOX_PAD * 2 - 132, ROW_H })) {
       stroke_toggle_fill_last();
+      hud_tooltip_show(g_state->shape_filled ? "Box: ON" : "Box: OFF");
       return;
     }
 
@@ -671,10 +717,10 @@ void toolbox_handle_input(void) {
   } else {
     // Default Shapes (Line, Arrow, Polygon, Circle)
     // Row 3: [Solid] [Dash] [Dots] [Fill*]
-    if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_SOLID; return; }
-    if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_DASHED; return; }
-    if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_DOTTED; return; }
-    if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r3, COLS_4_W, ROW_H })) { stroke_toggle_fill_last(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ col_x(0), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_SOLID; tool_notify_current(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ col_x(1), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_DASHED; tool_notify_current(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ col_x(2), r3, COLS_4_W, ROW_H })) { g_state->shape_stroke_style = STYLE_DOTTED; tool_notify_current(); return; }
+    if (CheckCollisionPointRec(m, (Rectangle){ col_x(3), r3, COLS_4_W, ROW_H })) { stroke_toggle_fill_last(); hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF"); return; }
 
     // Row 4: Border thickness slider + (Dash/Dot Spacing slider if dashed/dotted)
     bool split = (g_state->shape_stroke_style == STYLE_DASHED || g_state->shape_stroke_style == STYLE_DOTTED);
@@ -855,18 +901,18 @@ void toolbox_render(void) {
     // Row 3: Rows and Cols counters [ - R + ]  [ - C + ]
     float btn_w = 28;
     float rx0 = s_popup_pos.x + BOX_PAD;
-    draw_btn(rx0, r3, btn_w, ROW_H, "-", (Texture2D){ 0 }, false);
+    draw_btn(rx0, r3, btn_w, ROW_H, "-", minus_tex, false);
     char rbuf[16];
     snprintf(rbuf, sizeof(rbuf), "R:%d", g_state->table_rows);
     txt(rx0 + 32, r3 + 7, rbuf, WHITE);
-    draw_btn(rx0 + 64, r3, btn_w, ROW_H, "+", (Texture2D){ 0 }, false);
+    draw_btn(rx0 + 64, r3, btn_w, ROW_H, "+", plus_tex, false);
 
     float cx0 = rx0 + 135;
-    draw_btn(cx0, r3, btn_w, ROW_H, "-", (Texture2D){ 0 }, false);
+    draw_btn(cx0, r3, btn_w, ROW_H, "-", minus_tex, false);
     char cbuf[16];
     snprintf(cbuf, sizeof(cbuf), "C:%d", g_state->table_cols);
     txt(cx0 + 32, r3 + 7, cbuf, WHITE);
-    draw_btn(cx0 + 64, r3, btn_w, ROW_H, "+", (Texture2D){ 0 }, false);
+    draw_btn(cx0 + 64, r3, btn_w, ROW_H, "+", plus_tex, false);
     update_tooltip("Adjust Rows & Columns (or use Arrow keys while dragging)", (Rectangle){ rx0, r3, BOX_W - BOX_PAD * 2, ROW_H });
 
     // Row 4: Border thickness slider
@@ -886,7 +932,7 @@ void toolbox_render(void) {
     txt(bx + 53, r5 + 8, "Fill", (Color){ 240, 240, 240, 255 });
     update_tooltip("Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
 
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", (Texture2D){ 0 }, g_state->shape_filled);
+    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
     update_tooltip("Toggle Background Fill (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
 
     float op_x = bx + 144;
@@ -944,10 +990,10 @@ void toolbox_render(void) {
       update_tooltip("Badge Size Slider (14-42px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r4, 150, ROW_H });
 
       float r_x = s_popup_pos.x + BOX_PAD + 156;
-      draw_btn(r_x, r4, 50, ROW_H, "#1", (Texture2D){ 0 }, false);
+      draw_btn(r_x, r4, 50, ROW_H, "#1", reset_tex, false);
       update_tooltip("Reset Counter to 1", (Rectangle){ r_x, r4, 50, ROW_H });
 
-      draw_btn(r_x + 54, r4, 50, ROW_H, "Pop -", (Texture2D){ 0 }, false);
+      draw_btn(r_x + 54, r4, 50, ROW_H, "Pop -", pop_tex, false);
       update_tooltip("Pop Last Badge (-)", (Rectangle){ r_x + 54, r4, 50, ROW_H });
     }
 
@@ -961,7 +1007,7 @@ void toolbox_render(void) {
     txt(bx + 54, r5 + 8, "Fill", WHITE);
     update_tooltip("Badge Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
 
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", (Texture2D){ 0 }, g_state->shape_filled);
+    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
     update_tooltip("Toggle Filled / Hollow Badge (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
 
     float op_x = bx + 144;
@@ -973,17 +1019,17 @@ void toolbox_render(void) {
   } else if (cur == TOOL_NGON) {
     // Row 3: Sides counter [ - ] N: %d [ + ] and Style buttons [Solid] [Dash] [Dots] [Fill*]
     float rx0 = s_popup_pos.x + BOX_PAD;
-    draw_btn(rx0, r3, 26, ROW_H, "-", (Texture2D){ 0 }, false);
+    draw_btn(rx0, r3, 26, ROW_H, "-", minus_tex, false);
     char nbuf[16];
     snprintf(nbuf, sizeof(nbuf), "N:%d", g_state->ngon_sides);
     txt(rx0 + 29, r3 + 7, nbuf, WHITE);
-    draw_btn(rx0 + 58, r3, 26, ROW_H, "+", (Texture2D){ 0 }, false);
+    draw_btn(rx0 + 58, r3, 26, ROW_H, "+", plus_tex, false);
 
     float st_x = rx0 + 88;
-    draw_btn(st_x, r3, 41, ROW_H, "Solid", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_SOLID);
-    draw_btn(st_x + 44, r3, 41, ROW_H, "Dash", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_DASHED);
-    draw_btn(st_x + 88, r3, 41, ROW_H, "Dots", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_DOTTED);
-    draw_btn(st_x + 132, r3, 41, ROW_H, g_state->shape_filled ? "Fill*" : "Fill", (Texture2D){ 0 }, g_state->shape_filled);
+    draw_btn(st_x, r3, 41, ROW_H, "Solid", solid_tex, g_state->shape_stroke_style == STYLE_SOLID);
+    draw_btn(st_x + 44, r3, 41, ROW_H, "Dash", dash_tex, g_state->shape_stroke_style == STYLE_DASHED);
+    draw_btn(st_x + 88, r3, 41, ROW_H, "Dots", dots_tex, g_state->shape_stroke_style == STYLE_DOTTED);
+    draw_btn(st_x + 132, r3, 41, ROW_H, g_state->shape_filled ? "Fill*" : "Fill", fill_tex, g_state->shape_filled);
     update_tooltip("Adjust N-gon Sides (Up/Down) & Style", (Rectangle){ rx0, r3, BOX_W - BOX_PAD * 2, ROW_H });
 
     // Row 4: Border thickness slider + (Dash/Dot Spacing slider if dashed/dotted)
@@ -1014,7 +1060,7 @@ void toolbox_render(void) {
     txt(bx + 54, r5 + 8, "Fill", WHITE);
     update_tooltip("Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
 
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", (Texture2D){ 0 }, g_state->shape_filled);
+    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
     update_tooltip("Toggle Background Fill (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
 
     float op_x = bx + 144;
@@ -1051,7 +1097,7 @@ void toolbox_render(void) {
     txt(bx + 74, r4 + 8, "Box", WHITE);
     update_tooltip("Text Box Fill Color (yad picker)", (Rectangle){ bx + 66, r4, 60, ROW_H });
 
-    draw_btn(bx + 132, r4, BOX_W - BOX_PAD * 2 - 132, ROW_H, g_state->shape_filled ? "Box: On" : "Box: Off", (Texture2D){ 0 }, g_state->shape_filled);
+    draw_btn(bx + 132, r4, BOX_W - BOX_PAD * 2 - 132, ROW_H, g_state->shape_filled ? "Box: On" : "Box: Off", fill_tex, g_state->shape_filled);
     update_tooltip("Toggle Background Box (Ctrl+F)", (Rectangle){ bx + 132, r4, BOX_W - BOX_PAD * 2 - 132, ROW_H });
 
     // Row 5: Background Opacity Slider
@@ -1062,16 +1108,16 @@ void toolbox_render(void) {
   } else {
     // Default Shapes: Line, Arrow, Polygon, Circle
     // Row 3: [Solid] [Dash] [Dots] [Fill*]
-    draw_btn(col_x(0), r3, COLS_4_W, ROW_H, "Solid", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_SOLID);
+    draw_btn(col_x(0), r3, COLS_4_W, ROW_H, "Solid", solid_tex, g_state->shape_stroke_style == STYLE_SOLID);
     update_tooltip("Solid Border", (Rectangle){ col_x(0), r3, COLS_4_W, ROW_H });
 
-    draw_btn(col_x(1), r3, COLS_4_W, ROW_H, "Dash", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_DASHED);
+    draw_btn(col_x(1), r3, COLS_4_W, ROW_H, "Dash", dash_tex, g_state->shape_stroke_style == STYLE_DASHED);
     update_tooltip("Dashed Border ([ / ] dash spacing)", (Rectangle){ col_x(1), r3, COLS_4_W, ROW_H });
 
-    draw_btn(col_x(2), r3, COLS_4_W, ROW_H, "Dots", (Texture2D){ 0 }, g_state->shape_stroke_style == STYLE_DOTTED);
+    draw_btn(col_x(2), r3, COLS_4_W, ROW_H, "Dots", dots_tex, g_state->shape_stroke_style == STYLE_DOTTED);
     update_tooltip("Dotted Border", (Rectangle){ col_x(2), r3, COLS_4_W, ROW_H });
 
-    draw_btn(col_x(3), r3, COLS_4_W, ROW_H, g_state->shape_filled ? "Fill*" : "Fill", (Texture2D){ 0 }, g_state->shape_filled);
+    draw_btn(col_x(3), r3, COLS_4_W, ROW_H, g_state->shape_filled ? "Fill*" : "Fill", fill_tex, g_state->shape_filled);
     update_tooltip("Toggle Fill (Ctrl+F)", (Rectangle){ col_x(3), r3, COLS_4_W, ROW_H });
 
     // Row 4: Border thickness slider + (Dash/Dot Spacing slider if dashed/dotted)
@@ -1102,7 +1148,7 @@ void toolbox_render(void) {
     txt(bx + 54, r5 + 8, "Fill", WHITE);
     update_tooltip("Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
 
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", (Texture2D){ 0 }, g_state->shape_filled);
+    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
     update_tooltip("Toggle Fill (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
 
     float op_x = bx + 144;
@@ -1187,5 +1233,5 @@ void keymaps_render(void) {
 
   ly += gap * 11 + 10;
 
-  DrawText("Right Drag / Pen: Draw   |   Left Drag: Pan   |   Wheel: Zoom   |   Esc/Q: Close", lx1, ly, 15, (Color){ 170, 170, 170, 255 });
+  DrawText("Right Drag / Pen: Draw   |   Left Drag: Pan   |   Wheel: Zoom   |   Del: Reset All   |   Esc/Q: Close", lx1, ly, 15, (Color){ 170, 170, 170, 255 });
 }
