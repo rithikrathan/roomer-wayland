@@ -296,6 +296,95 @@ static void draw_slider(float x, float y, float w, float h, const char* label, c
   DrawCircleV((Vector2){ thumb_x, track_y + SLIDER_H / 2.0F }, THUMB_R, (Color){ 220, 220, 220, 255 });
 }
 
+static bool handle_row5_color_sets_input(Vector2 m, float r5) {
+  float bx = s_popup_pos.x + BOX_PAD;
+  // Set 1 Line
+  if (CheckCollisionPointRec(m, (Rectangle){ bx, r5, 30, ROW_H })) {
+    g_state->color1 = open_color_picker(g_state->color1);
+    swatch_set_active(0);
+    return true;
+  }
+  // Set 1 Fill
+  if (CheckCollisionPointRec(m, (Rectangle){ bx + 34, r5, 30, ROW_H })) {
+    g_state->fill_color1 = open_color_picker(g_state->fill_color1);
+    swatch_set_active(0);
+    return true;
+  }
+  // Swap button
+  if (CheckCollisionPointRec(m, (Rectangle){ bx + 68, r5, 24, ROW_H })) {
+    swatch_swap();
+    return true;
+  }
+  // Set 2 Line
+  if (CheckCollisionPointRec(m, (Rectangle){ bx + 96, r5, 30, ROW_H })) {
+    g_state->color2 = open_color_picker(g_state->color2);
+    swatch_set_active(1);
+    return true;
+  }
+  // Set 2 Fill
+  if (CheckCollisionPointRec(m, (Rectangle){ bx + 130, r5, 30, ROW_H })) {
+    g_state->fill_color2 = open_color_picker(g_state->fill_color2);
+    swatch_set_active(1);
+    return true;
+  }
+  // Fill Toggle
+  if (CheckCollisionPointRec(m, (Rectangle){ bx + 164, r5, 34, ROW_H })) {
+    stroke_toggle_fill_last();
+    hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF");
+    return true;
+  }
+  // Opacity Slider
+  float op_x = bx + 202;
+  float op_w = BOX_W - BOX_PAD * 2 - 202;
+  if (CheckCollisionPointRec(m, (Rectangle){ op_x, r5, op_w, ROW_H })) {
+    s_dragging_opacity = true;
+    float t = Clamp((m.x - (op_x + 18)) / (op_w - 38), 0.0f, 1.0f);
+    g_state->shape_fill_opacity = t;
+    return true;
+  }
+  return false;
+}
+
+static void render_row5_color_sets(float r5) {
+  float bx = s_popup_pos.x + BOX_PAD;
+  bool set1_active = (g_state->active_swatch == 0);
+  bool set2_active = (g_state->active_swatch == 1);
+
+  // Set 1: Line & Fill
+  draw_swatch(bx, r5, 30, ROW_H, g_state->color1, set1_active, set1_active);
+  txt(bx + 4, r5 + 8, "L1", WHITE);
+  update_tooltip("Set 1: Line Color (click to pick)", (Rectangle){ bx, r5, 30, ROW_H });
+
+  draw_swatch(bx + 34, r5, 30, ROW_H, g_state->fill_color1, set1_active, false);
+  txt(bx + 38, r5 + 8, "F1", WHITE);
+  update_tooltip("Set 1: Fill Color (click to pick)", (Rectangle){ bx + 34, r5, 30, ROW_H });
+
+  // Swap button <>
+  draw_btn(bx + 68, r5, 24, ROW_H, "<>", swap_tex, false);
+  update_tooltip("Swap Color Sets (X)", (Rectangle){ bx + 68, r5, 24, ROW_H });
+
+  // Set 2: Line & Fill
+  draw_swatch(bx + 96, r5, 30, ROW_H, g_state->color2, set2_active, set2_active);
+  txt(bx + 100, r5 + 8, "L2", (Color){ 240, 240, 240, 255 });
+  update_tooltip("Set 2: Line Color (click to pick)", (Rectangle){ bx + 96, r5, 30, ROW_H });
+
+  draw_swatch(bx + 130, r5, 30, ROW_H, g_state->fill_color2, set2_active, false);
+  txt(bx + 134, r5 + 8, "F2", (Color){ 240, 240, 240, 255 });
+  update_tooltip("Set 2: Fill Color (click to pick)", (Rectangle){ bx + 130, r5, 30, ROW_H });
+
+  // Fill Toggle button
+  draw_btn(bx + 164, r5, 34, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
+  update_tooltip("Toggle Fill (Ctrl+F)", (Rectangle){ bx + 164, r5, 34, ROW_H });
+
+  // Opacity Slider
+  float op_x = bx + 202;
+  float op_w = BOX_W - BOX_PAD * 2 - 202;
+  char opbuf[16];
+  snprintf(opbuf, sizeof(opbuf), "%d%%", (int)(g_state->shape_fill_opacity * 100.0f));
+  draw_slider(op_x, r5, op_w, ROW_H, "A:", opbuf, g_state->shape_fill_opacity);
+  update_tooltip("Fill Opacity Slider", (Rectangle){ op_x, r5, op_w, ROW_H });
+}
+
 // ── Input Handling ──────────────────────────────────────────
 
 void toolbox_handle_input(void) {
@@ -331,7 +420,7 @@ void toolbox_handle_input(void) {
       float sl_x = s_popup_pos.x + BOX_PAD + 38;
       float sl_w = total_w - 38 - 36;
       float t = Clamp((m.x - sl_x) / sl_w, 0.0f, 1.0f);
-      g_state->shape_thickness = Clamp(1.0f + t * 11.0f, 1.0f, 12.0f);
+      g_state->shape_thickness = Clamp(1.0f + t * 5.0f, 1.0f, 6.0f);
       return;
     }
     s_dragging_border = false;
@@ -342,7 +431,7 @@ void toolbox_handle_input(void) {
       float sl_x = s_popup_pos.x + BOX_PAD + 130 + 38;
       float sl_w = 130 - 38 - 36;
       float t = Clamp((m.x - sl_x) / sl_w, 0.0f, 1.0f);
-      g_state->shape_dash_gap = Clamp(3.0f + t * 22.0f, 3.0f, 25.0f);
+      g_state->shape_dash_gap = Clamp(2.0f + t * 14.0f, 2.0f, 16.0f);
       g_state->shape_dash_len = g_state->shape_dash_gap * 1.5f;
       return;
     }
@@ -363,9 +452,12 @@ void toolbox_handle_input(void) {
 
   if (s_dragging_opacity) {
     if (mouse_down) {
-      float sl_x = s_popup_pos.x + BOX_PAD + 144 + 25;
-      float sl_w = BOX_W - BOX_PAD * 2 - 144 - 25 - 35;
-      if (sl_w < 20) sl_w = 20;
+      float bx = s_popup_pos.x + BOX_PAD;
+      float op_x = bx + 202;
+      float op_w = BOX_W - BOX_PAD * 2 - 202;
+      float sl_x = op_x + 18;
+      float sl_w = op_w - 38;
+      if (sl_w < 10) sl_w = 10;
       float t = Clamp((m.x - sl_x) / sl_w, 0.0f, 1.0f);
       g_state->shape_fill_opacity = t;
       return;
@@ -459,19 +551,16 @@ void toolbox_handle_input(void) {
 
       if (CheckCollisionPointRec(m, (Rectangle){ cc_x, r4, cc_w, ROW_H })) {
         g_state->color1 = open_color_picker(g_state->color1);
-        g_state->active_swatch = 0;
-        g_configuration->draw_color = g_state->color1;
+        swatch_set_active(0);
         return;
       }
       if (CheckCollisionPointRec(m, (Rectangle){ swap_x, r4, sw_sz, ROW_H })) {
-        g_state->active_swatch = !g_state->active_swatch;
-        g_configuration->draw_color = g_state->active_swatch ? g_state->color2 : g_state->color1;
+        swatch_swap();
         return;
       }
       if (CheckCollisionPointRec(m, (Rectangle){ c2_x, r4, cc_w, ROW_H })) {
         g_state->color2 = open_color_picker(g_state->color2);
-        g_state->active_swatch = 1;
-        g_configuration->draw_color = g_state->color2;
+        swatch_set_active(1);
         return;
       }
     }
@@ -492,32 +581,12 @@ void toolbox_handle_input(void) {
     if (CheckCollisionPointRec(m, (Rectangle){ s_popup_pos.x + BOX_PAD, r4, BOX_W - BOX_PAD * 2, ROW_H })) {
       s_dragging_border = true;
       float t = Clamp((m.x - sl_x) / sl_w, 0.0f, 1.0f);
-      g_state->shape_thickness = Clamp(1.0f + t * 11.0f, 1.0f, 12.0f);
+      g_state->shape_thickness = Clamp(1.0f + t * 5.0f, 1.0f, 6.0f);
       return;
     }
 
-    // Row 5: Border Color (yad) + Fill Color (yad) + Fill Opacity slider
-    float bx = s_popup_pos.x + BOX_PAD;
-    if (CheckCollisionPointRec(m, (Rectangle){ bx, r5, 42, ROW_H })) {
-      g_state->shape_border_color = open_color_picker(g_state->shape_border_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 48, r5, 42, ROW_H })) {
-      g_state->fill_color = open_color_picker(g_state->fill_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 96, r5, 42, ROW_H })) {
-      stroke_toggle_fill_last();
-      return;
-    }
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    if (CheckCollisionPointRec(m, (Rectangle){ op_x, r5, op_w, ROW_H })) {
-      s_dragging_opacity = true;
-      float t = Clamp((m.x - (op_x + 22)) / (op_w - 55), 0.0f, 1.0f);
-      g_state->shape_fill_opacity = t;
-      return;
-    }
+    // Row 5: Color Sets & Opacity
+    if (handle_row5_color_sets_input(m, r5)) return;
   } else if (cur == TOOL_STEP_BADGE) {
     // Row 3: 4 Mode Buttons [ 123 ] [ ABC ] [ abc ] [ Name ]
     float b_w = (BOX_W - BOX_PAD * 2 - GAP_4 * 3) / 4;
@@ -583,29 +652,8 @@ void toolbox_handle_input(void) {
       }
     }
 
-    // Row 5: Border Color (yad) + Fill Color (yad) + Fill Opacity
-    float bx = s_popup_pos.x + BOX_PAD;
-    if (CheckCollisionPointRec(m, (Rectangle){ bx, r5, 42, ROW_H })) {
-      g_state->shape_border_color = open_color_picker(g_state->shape_border_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 48, r5, 42, ROW_H })) {
-      g_state->fill_color = open_color_picker(g_state->fill_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 96, r5, 42, ROW_H })) {
-      stroke_toggle_fill_last();
-      hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF");
-      return;
-    }
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    if (CheckCollisionPointRec(m, (Rectangle){ op_x, r5, op_w, ROW_H })) {
-      s_dragging_opacity = true;
-      float t = Clamp((m.x - (op_x + 22)) / (op_w - 55), 0.0f, 1.0f);
-      g_state->shape_fill_opacity = t;
-      return;
-    }
+    // Row 5: Color Sets & Opacity
+    if (handle_row5_color_sets_input(m, r5)) return;
   } else if (cur == TOOL_NGON) {
     // Row 3: Sides counter [ - ] N: %d [ + ] and Style buttons [Solid] [Dash] [Dots] [Fill*]
     float rx0 = s_popup_pos.x + BOX_PAD;
@@ -633,7 +681,7 @@ void toolbox_handle_input(void) {
       s_dragging_border = true;
       float sl_x = s_popup_pos.x + BOX_PAD + 38;
       float t = Clamp((m.x - sl_x) / (sl_w - 38 - 36), 0.0f, 1.0f);
-      g_state->shape_thickness = Clamp(1.0f + t * 11.0f, 1.0f, 12.0f);
+      g_state->shape_thickness = Clamp(1.0f + t * 5.0f, 1.0f, 6.0f);
       return;
     }
     if (split) {
@@ -642,35 +690,14 @@ void toolbox_handle_input(void) {
         s_dragging_dash_gap = true;
         float sl_x = gap_x + 38;
         float t = Clamp((m.x - sl_x) / (130 - 38 - 36), 0.0f, 1.0f);
-        g_state->shape_dash_gap = Clamp(3.0f + t * 22.0f, 3.0f, 25.0f);
+        g_state->shape_dash_gap = Clamp(2.0f + t * 14.0f, 2.0f, 16.0f);
         g_state->shape_dash_len = g_state->shape_dash_gap * 1.5f;
         return;
       }
     }
 
-    // Row 5: Border Color + Fill Color + Fill Toggle + Fill Opacity
-    float bx = s_popup_pos.x + BOX_PAD;
-    if (CheckCollisionPointRec(m, (Rectangle){ bx, r5, 42, ROW_H })) {
-      g_state->shape_border_color = open_color_picker(g_state->shape_border_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 48, r5, 42, ROW_H })) {
-      g_state->fill_color = open_color_picker(g_state->fill_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 96, r5, 42, ROW_H })) {
-      stroke_toggle_fill_last();
-      hud_tooltip_show(g_state->shape_filled ? "Fill: ON" : "Fill: OFF");
-      return;
-    }
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    if (CheckCollisionPointRec(m, (Rectangle){ op_x, r5, op_w, ROW_H })) {
-      s_dragging_opacity = true;
-      float t = Clamp((m.x - (op_x + 22)) / (op_w - 55), 0.0f, 1.0f);
-      g_state->shape_fill_opacity = t;
-      return;
-    }
+    // Row 5: Color Sets & Opacity
+    if (handle_row5_color_sets_input(m, r5)) return;
   } else if (cur == TOOL_TEXT) {
     // Row 3: Font Size slider + [B] [I]
     float bi_w = 26;
@@ -696,30 +723,8 @@ void toolbox_handle_input(void) {
       return;
     }
 
-    // Row 4: Text Color (yad) + Fill Color (yad) + Box Fill Toggle
-    float bx = s_popup_pos.x + BOX_PAD;
-    if (CheckCollisionPointRec(m, (Rectangle){ bx, r4, 60, ROW_H })) {
-      g_state->shape_border_color = open_color_picker(g_state->shape_border_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 66, r4, 60, ROW_H })) {
-      g_state->fill_color = open_color_picker(g_state->fill_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 132, r4, BOX_W - BOX_PAD * 2 - 132, ROW_H })) {
-      stroke_toggle_fill_last();
-      hud_tooltip_show(g_state->shape_filled ? "Box: ON" : "Box: OFF");
-      return;
-    }
-
-    // Row 5: Background Opacity Slider
-    float op_x = s_popup_pos.x + BOX_PAD + 55;
-    float op_w = BOX_W - BOX_PAD * 2 - 55 - 45;
-    if (CheckCollisionPointRec(m, (Rectangle){ op_x, r5, op_w, ROW_H })) {
-      s_dragging_opacity = true;
-      g_state->shape_fill_opacity = Clamp((m.x - op_x) / op_w, 0.0f, 1.0f);
-      return;
-    }
+    // Row 5: Color Sets & Opacity
+    if (handle_row5_color_sets_input(m, r5)) return;
   } else {
     // Default Shapes (Line, Arrow, Polygon, Circle)
     // Row 3: [Solid] [Dash] [Dots] [Fill*]
@@ -735,7 +740,7 @@ void toolbox_handle_input(void) {
       s_dragging_border = true;
       float sl_x = s_popup_pos.x + BOX_PAD + 38;
       float t = Clamp((m.x - sl_x) / (sl_w - 38 - 36), 0.0f, 1.0f);
-      g_state->shape_thickness = Clamp(1.0f + t * 11.0f, 1.0f, 12.0f);
+      g_state->shape_thickness = Clamp(1.0f + t * 5.0f, 1.0f, 6.0f);
       return;
     }
     if (split) {
@@ -744,34 +749,14 @@ void toolbox_handle_input(void) {
         s_dragging_dash_gap = true;
         float sl_x = gap_x + 38;
         float t = Clamp((m.x - sl_x) / (130 - 38 - 36), 0.0f, 1.0f);
-        g_state->shape_dash_gap = Clamp(3.0f + t * 22.0f, 3.0f, 25.0f);
+        g_state->shape_dash_gap = Clamp(2.0f + t * 14.0f, 2.0f, 16.0f);
         g_state->shape_dash_len = g_state->shape_dash_gap * 1.5f;
         return;
       }
     }
 
-    // Row 5: Border Color (yad) + Fill Color (yad) + Fill Opacity slider
-    float bx = s_popup_pos.x + BOX_PAD;
-    if (CheckCollisionPointRec(m, (Rectangle){ bx, r5, 42, ROW_H })) {
-      g_state->shape_border_color = open_color_picker(g_state->shape_border_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 48, r5, 42, ROW_H })) {
-      g_state->fill_color = open_color_picker(g_state->fill_color);
-      return;
-    }
-    if (CheckCollisionPointRec(m, (Rectangle){ bx + 96, r5, 42, ROW_H })) {
-      stroke_toggle_fill_last();
-      return;
-    }
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    if (CheckCollisionPointRec(m, (Rectangle){ op_x, r5, op_w, ROW_H })) {
-      s_dragging_opacity = true;
-      float t = Clamp((m.x - (op_x + 22)) / (op_w - 55), 0.0f, 1.0f);
-      g_state->shape_fill_opacity = t;
-      return;
-    }
+    // Row 5: Color Sets & Opacity
+    if (handle_row5_color_sets_input(m, r5)) return;
   }
 
   // Row 6: Zoom slider
@@ -930,29 +915,12 @@ void toolbox_render(void) {
     // Row 4: Border thickness slider
     char bbuf[16];
     snprintf(bbuf, sizeof(bbuf), "%.1f", g_state->shape_thickness);
-    float bt = (g_state->shape_thickness - 1.0f) / 11.0f;
+    float bt = (g_state->shape_thickness - 1.0f) / 5.0f;
     draw_slider(s_popup_pos.x + BOX_PAD, r4, BOX_W - BOX_PAD * 2, ROW_H, "Border", bbuf, bt);
-    update_tooltip("Border Thickness (1-12px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r4, BOX_W - BOX_PAD * 2, ROW_H });
+    update_tooltip("Border Thickness (1-6px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r4, BOX_W - BOX_PAD * 2, ROW_H });
 
-    // Row 5: Border Color + Fill Color + Fill Toggle + Opacity
-    float bx = s_popup_pos.x + BOX_PAD;
-    draw_swatch(bx, r5, 42, ROW_H, g_state->shape_border_color, false, false);
-    txt(bx + 5, r5 + 8, "Line", (Color){ 240, 240, 240, 255 });
-    update_tooltip("Border Color (yad picker)", (Rectangle){ bx, r5, 42, ROW_H });
-
-    draw_swatch(bx + 48, r5, 42, ROW_H, g_state->fill_color, false, false);
-    txt(bx + 53, r5 + 8, "Fill", (Color){ 240, 240, 240, 255 });
-    update_tooltip("Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
-
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
-    update_tooltip("Toggle Background Fill (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
-
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    char opbuf[16];
-    snprintf(opbuf, sizeof(opbuf), "%d%%", (int)(g_state->shape_fill_opacity * 100.0f));
-    draw_slider(op_x, r5, op_w, ROW_H, "A:", opbuf, g_state->shape_fill_opacity);
-    update_tooltip("Fill Opacity Slider", (Rectangle){ op_x, r5, op_w, ROW_H });
+    // Row 5: Color sets
+    render_row5_color_sets(r5);
   } else if (cur == TOOL_STEP_BADGE) {
     // Row 3: 4 Mode Buttons [ 123 ] [ ABC ] [ abc ] [ Name ]
     float b_w = (BOX_W - BOX_PAD * 2 - GAP_4 * 3) / 4;
@@ -1009,25 +977,8 @@ void toolbox_render(void) {
       update_tooltip("Pop Last Badge (-)", (Rectangle){ r_x + 54, r4, 50, ROW_H });
     }
 
-    // Row 5: Border Color (yad) + Fill Color (yad) + Fill Opacity
-    float bx = s_popup_pos.x + BOX_PAD;
-    draw_swatch(bx, r5, 42, ROW_H, g_state->shape_border_color, false, false);
-    txt(bx + 6, r5 + 8, "Ring", WHITE);
-    update_tooltip("Badge Border Ring Color (yad picker)", (Rectangle){ bx, r5, 42, ROW_H });
-
-    draw_swatch(bx + 48, r5, 42, ROW_H, g_state->fill_color, false, false);
-    txt(bx + 54, r5 + 8, "Fill", WHITE);
-    update_tooltip("Badge Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
-
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
-    update_tooltip("Toggle Filled / Hollow Badge (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
-
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    char opbuf[16];
-    snprintf(opbuf, sizeof(opbuf), "%d%%", (int)(g_state->shape_fill_opacity * 100.0f));
-    draw_slider(op_x, r5, op_w, ROW_H, "A:", opbuf, g_state->shape_fill_opacity);
-    update_tooltip("Badge Fill Opacity Slider", (Rectangle){ op_x, r5, op_w, ROW_H });
+    // Row 5: Color sets
+    render_row5_color_sets(r5);
   } else if (cur == TOOL_NGON) {
     // Row 3: Sides counter [ - ] N: %d [ + ] and Style buttons [Solid] [Dash] [Dots] [Fill*]
     float rx0 = s_popup_pos.x + BOX_PAD;
@@ -1049,38 +1000,21 @@ void toolbox_render(void) {
     float sl_w = split ? 124.0f : (BOX_W - BOX_PAD * 2);
     char bbuf[16];
     snprintf(bbuf, sizeof(bbuf), "%.1f", g_state->shape_thickness);
-    float bt = (g_state->shape_thickness - 1.0f) / 11.0f;
+    float bt = (g_state->shape_thickness - 1.0f) / 5.0f;
     draw_slider(s_popup_pos.x + BOX_PAD, r4, sl_w, ROW_H, "Border", bbuf, bt);
-    update_tooltip("Border Thickness (1-12px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r4, sl_w, ROW_H });
+    update_tooltip("Border Thickness (1-6px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r4, sl_w, ROW_H });
 
     if (split) {
       float gap_x = s_popup_pos.x + BOX_PAD + 130;
       char gbuf[16];
       snprintf(gbuf, sizeof(gbuf), "%.1f", g_state->shape_dash_gap);
-      float gt = (g_state->shape_dash_gap - 3.0f) / 22.0f;
+      float gt = (g_state->shape_dash_gap - 2.0f) / 14.0f;
       draw_slider(gap_x, r4, 130, ROW_H, "Gap", gbuf, gt);
-      update_tooltip("Dash / Dot Spacing Slider (3-25px)", (Rectangle){ gap_x, r4, 130, ROW_H });
+      update_tooltip("Dash / Dot Spacing Slider (2-16px)", (Rectangle){ gap_x, r4, 130, ROW_H });
     }
 
-    // Row 5: Border Color + Fill Color + Fill Toggle + Opacity
-    float bx = s_popup_pos.x + BOX_PAD;
-    draw_swatch(bx, r5, 42, ROW_H, g_state->shape_border_color, false, false);
-    txt(bx + 6, r5 + 8, "Line", WHITE);
-    update_tooltip("Border Color (yad picker)", (Rectangle){ bx, r5, 42, ROW_H });
-
-    draw_swatch(bx + 48, r5, 42, ROW_H, g_state->fill_color, false, false);
-    txt(bx + 54, r5 + 8, "Fill", WHITE);
-    update_tooltip("Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
-
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
-    update_tooltip("Toggle Background Fill (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
-
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    char opbuf[16];
-    snprintf(opbuf, sizeof(opbuf), "%d%%", (int)(g_state->shape_fill_opacity * 100.0f));
-    draw_slider(op_x, r5, op_w, ROW_H, "A:", opbuf, g_state->shape_fill_opacity);
-    update_tooltip("Fill Opacity Slider", (Rectangle){ op_x, r5, op_w, ROW_H });
+    // Row 5: Color sets
+    render_row5_color_sets(r5);
   } else if (cur == TOOL_TEXT) {
     // Row 3: Font Size slider + [B] [I]
     float bi_w = 26;
@@ -1099,24 +1033,11 @@ void toolbox_render(void) {
     draw_slider(s_popup_pos.x + BOX_PAD, r3, sl_w, ROW_H, "Font", fsbuf, t);
     update_tooltip("Font Size Slider (14-52px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r3, sl_w, ROW_H });
 
-    // Row 4: Text Color (yad) + Box Fill Color (yad) + Box Fill Toggle
-    float bx = s_popup_pos.x + BOX_PAD;
-    draw_swatch(bx, r4, 60, ROW_H, g_state->shape_border_color, false, false);
-    txt(bx + 8, r4 + 8, "Text", WHITE);
-    update_tooltip("Text Color (yad picker)", (Rectangle){ bx, r4, 60, ROW_H });
+    // Row 4: Quick Hint
+    txt(s_popup_pos.x + BOX_PAD + 15, r4 + 8, "Left: Pan  |  Right: Type text", (Color){ 140, 140, 140, 255 });
 
-    draw_swatch(bx + 66, r4, 60, ROW_H, g_state->fill_color, false, false);
-    txt(bx + 74, r4 + 8, "Box", WHITE);
-    update_tooltip("Text Box Fill Color (yad picker)", (Rectangle){ bx + 66, r4, 60, ROW_H });
-
-    draw_btn(bx + 132, r4, BOX_W - BOX_PAD * 2 - 132, ROW_H, g_state->shape_filled ? "Box: On" : "Box: Off", fill_tex, g_state->shape_filled);
-    update_tooltip("Toggle Background Box (Ctrl+F)", (Rectangle){ bx + 132, r4, BOX_W - BOX_PAD * 2 - 132, ROW_H });
-
-    // Row 5: Background Opacity Slider
-    char opbuf[16];
-    snprintf(opbuf, sizeof(opbuf), "%d%%", (int)(g_state->shape_fill_opacity * 100.0f));
-    draw_slider(s_popup_pos.x + BOX_PAD, r5, BOX_W - BOX_PAD * 2, ROW_H, "Box Opacity", opbuf, g_state->shape_fill_opacity);
-    update_tooltip("Background Box Opacity Slider", (Rectangle){ s_popup_pos.x + BOX_PAD, r5, BOX_W - BOX_PAD * 2, ROW_H });
+    // Row 5: Color sets
+    render_row5_color_sets(r5);
   } else {
     // Default Shapes: Line, Arrow, Polygon, Circle
     // Row 3: [Solid] [Dash] [Dots] [Fill*]
@@ -1137,38 +1058,21 @@ void toolbox_render(void) {
     float sl_w = split ? 124.0f : (BOX_W - BOX_PAD * 2);
     char bbuf[16];
     snprintf(bbuf, sizeof(bbuf), "%.1f", g_state->shape_thickness);
-    float bt = (g_state->shape_thickness - 1.0f) / 11.0f;
+    float bt = (g_state->shape_thickness - 1.0f) / 5.0f;
     draw_slider(s_popup_pos.x + BOX_PAD, r4, sl_w, ROW_H, "Border", bbuf, bt);
-    update_tooltip("Shape Border Thickness Slider (1-12px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r4, sl_w, ROW_H });
+    update_tooltip("Shape Border Thickness Slider (1-6px)", (Rectangle){ s_popup_pos.x + BOX_PAD, r4, sl_w, ROW_H });
 
     if (split) {
       float gap_x = s_popup_pos.x + BOX_PAD + 130;
       char gbuf[16];
       snprintf(gbuf, sizeof(gbuf), "%.1f", g_state->shape_dash_gap);
-      float gt = (g_state->shape_dash_gap - 3.0f) / 22.0f;
+      float gt = (g_state->shape_dash_gap - 2.0f) / 14.0f;
       draw_slider(gap_x, r4, 130, ROW_H, "Gap", gbuf, gt);
-      update_tooltip("Dash / Dot Spacing Slider (3-25px)", (Rectangle){ gap_x, r4, 130, ROW_H });
+      update_tooltip("Dash / Dot Spacing Slider (2-16px)", (Rectangle){ gap_x, r4, 130, ROW_H });
     }
 
-    // Row 5: Border Color (yad) + Fill Color (yad) + Fill Opacity
-    float bx = s_popup_pos.x + BOX_PAD;
-    draw_swatch(bx, r5, 42, ROW_H, g_state->shape_border_color, false, false);
-    txt(bx + 6, r5 + 8, "Line", WHITE);
-    update_tooltip("Border Color (yad picker)", (Rectangle){ bx, r5, 42, ROW_H });
-
-    draw_swatch(bx + 48, r5, 42, ROW_H, g_state->fill_color, false, false);
-    txt(bx + 54, r5 + 8, "Fill", WHITE);
-    update_tooltip("Fill Color (yad picker)", (Rectangle){ bx + 48, r5, 42, ROW_H });
-
-    draw_btn(bx + 96, r5, 42, ROW_H, g_state->shape_filled ? "On" : "Off", fill_tex, g_state->shape_filled);
-    update_tooltip("Toggle Fill (Ctrl+F)", (Rectangle){ bx + 96, r5, 42, ROW_H });
-
-    float op_x = bx + 144;
-    float op_w = BOX_W - BOX_PAD * 2 - 144;
-    char opbuf[16];
-    snprintf(opbuf, sizeof(opbuf), "%d%%", (int)(g_state->shape_fill_opacity * 100.0f));
-    draw_slider(op_x, r5, op_w, ROW_H, "A:", opbuf, g_state->shape_fill_opacity);
-    update_tooltip("Fill Opacity Slider (no wallpaper bleed)", (Rectangle){ op_x, r5, op_w, ROW_H });
+    // Row 5: Color sets
+    render_row5_color_sets(r5);
   }
 
   // Row 6: Zoom slider

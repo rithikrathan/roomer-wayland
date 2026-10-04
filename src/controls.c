@@ -169,8 +169,26 @@ void reset_all_variables(bool clear_drawings) {
     g_state->target_pan.y = (fh - (float)h * g_state->target_zoom) / 2.0f;
     g_state->pan = g_state->target_pan;
   }
-  g_configuration->draw_color = g_state->color1;
+  swatch_set_active(0);
   hud_tooltip_show(clear_drawings ? "Reset All (Initial State)" : "Variables Reinitialized");
+}
+
+void swatch_set_active(int idx) {
+  g_state->active_swatch = idx ? 1 : 0;
+  if (g_state->active_swatch == 0) {
+    g_configuration->draw_color = g_state->color1;
+    g_state->shape_border_color = g_state->color1;
+    g_state->fill_color = g_state->fill_color1;
+  } else {
+    g_configuration->draw_color = g_state->color2;
+    g_state->shape_border_color = g_state->color2;
+    g_state->fill_color = g_state->fill_color2;
+  }
+}
+
+void swatch_swap(void) {
+  swatch_set_active(!g_state->active_swatch);
+  hud_tooltip_show(g_state->active_swatch ? "Color Set 2 Active" : "Color Set 1 Active");
 }
 
 static void handle_reset(void) {
@@ -560,9 +578,7 @@ static void handle_toolbox(void) {
     toolbox_toggle();
   }
   if (IsKeyPressed(KEY_X)) {
-    g_state->active_swatch      = !g_state->active_swatch;
-    g_configuration->draw_color = g_state->active_swatch ? g_state->color2 : g_state->color1;
-    hud_tooltip_show(g_state->active_swatch ? "Color 2 Active" : "Color 1 Active");
+    swatch_swap();
   }
   if (IsKeyPressed(KEY_B)) {
     g_state->black_board_enabled = !g_state->black_board_enabled;

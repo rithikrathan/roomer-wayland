@@ -50,6 +50,31 @@ Vector2 get_cursor_screen_pos(void) {
   return GetMousePosition();
 }
 
+static Vector2 s_precision_pos    = { 0 };
+static Vector2 s_prev_raw_pos     = { 0 };
+static bool    s_precision_active = false;
+
+Vector2 get_precision_cursor_screen_pos(void) {
+  Vector2 raw_pos = get_cursor_screen_pos();
+  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+  if (ctrl) {
+    if (!s_precision_active) {
+      s_precision_active = true;
+      s_precision_pos = raw_pos;
+      s_prev_raw_pos = raw_pos;
+    } else {
+      Vector2 delta = Vector2Subtract(raw_pos, s_prev_raw_pos);
+      // Low sensitivity: 0.15x speed for pixel-perfect control in every axis
+      s_precision_pos = Vector2Add(s_precision_pos, Vector2Scale(delta, 0.15f));
+    }
+  } else {
+    s_precision_active = false;
+    s_precision_pos = raw_pos;
+  }
+  s_prev_raw_pos = raw_pos;
+  return s_precision_pos;
+}
+
 // ── Color Picker (yad) ──────────────────────────────────────
 
 static Color parse_yad_color(const char* str, Color fallback) {
@@ -181,22 +206,20 @@ static void stroke_end(void) {
 }
 
 void stroke_toggle_fill_last(void) {
+  g_state->shape_filled = !g_state->shape_filled;
   StrokeLayer* l = get_active_layer();
-  for (int i = l->count - 1; i >= 0; i--) {
-    Stroke* s = &l->strokes[i];
+  if (l->count > 0) {
+    Stroke* s = &l->strokes[l->count - 1];
     if (s->type == SHAPE_POLYGON || s->type == SHAPE_NGON ||
         s->type == SHAPE_CIRCLE  || s->type == SHAPE_TABLE ||
         s->type == SHAPE_STEP_BADGE || s->type == SHAPE_TEXT) {
-      s->filled = !s->filled;
+      s->filled = g_state->shape_filled;
       Color fc = g_state->fill_color;
       fc.a = (unsigned char)(g_state->shape_fill_opacity * 255.0f);
       s->fill_color = fc;
       l->dirty = true;
-      g_state->shape_filled = s->filled;
-      return;
     }
   }
-  g_state->shape_filled = !g_state->shape_filled;
 }
 
 void step_badge_pop_last(void) {
@@ -446,18 +469,16 @@ static void draw_styled_segment(Vector2 a, Vector2 b, float thickness, Color col
       Vector2 p0 = Vector2Add(a, Vector2Scale(dir, t));
       Vector2 p1 = Vector2Add(a, Vector2Scale(dir, t_end));
       DrawLineEx(p0, p1, thickness, color);
-      DrawCircleV(p0, radius, color);
-      DrawCircleV(p1, radius, color);
       t += d_len + g_len;
     }
   } else if (style == STYLE_DOTTED) {
-    float dot_r = fmaxf(radius, 1.5f);
-    float g_len = fmaxf(dash_gap, dot_r * 2.5f);
-    float t = 0.0f;
-    while (t <= len) {
+    float dot_r = fmaxf(radius, 1.0f);
+    float step = (dot_r * 2.0f) + fmaxf(dash_gap, 2.0f);
+    float t = dot_r;
+    while (t <= len - dot_r + 0.5f) {
       Vector2 p = Vector2Add(a, Vector2Scale(dir, t));
       DrawCircleV(p, dot_r, color);
-      t += g_len;
+      t += step;
     }
   }
 }
@@ -479,6 +500,7 @@ static void draw_styled_arrow(Vector2 p0, Vector2 p1, float thickness, Color col
   Vector2 a1 = Vector2Add(shaft_end, Vector2Scale(normal, head_w));
   Vector2 a2 = Vector2Subtract(shaft_end, Vector2Scale(normal, head_w));
   DrawTriangle(p1, a2, a1, color);
+  DrawTriangle(p1, a1, a2, color);
 }
 
 static inline float snap_angle_15(float rad) {
@@ -500,11 +522,8 @@ static inline bool point_in_triangle(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
 static void draw_filled_polygon(const Vector2* screen_pts, int n, Color fill_color) {
   if (n < 3) return;
   if (n == 3) {
-    if (ccw(screen_pts[0], screen_pts[1], screen_pts[2]) > 0.0f) {
-      DrawTriangle(screen_pts[0], screen_pts[1], screen_pts[2], fill_color);
-    } else {
-      DrawTriangle(screen_pts[0], screen_pts[2], screen_pts[1], fill_color);
-    }
+    DrawTriangle(screen_pts[0], screen_pts[1], screen_pts[2], fill_color);
+    DrawTriangle(screen_pts[0], screen_pts[2], screen_pts[1], fill_color);
     return;
   }
 
@@ -546,11 +565,8 @@ static void draw_filled_polygon(const Vector2* screen_pts, int n, Color fill_col
       }
 
       if (ear) {
-        if (ccw(a, b, c) > 0.0f) {
-          DrawTriangle(a, b, c, fill_color);
-        } else {
-          DrawTriangle(a, c, b, fill_color);
-        }
+        DrawTriangle(a, b, c, fill_color);
+        DrawTriangle(a, c, b, fill_color);
         for (int k = i; k < count - 1; k++) {
           pts[k] = pts[k + 1];
         }
@@ -563,10 +579,13 @@ static void draw_filled_polygon(const Vector2* screen_pts, int n, Color fill_col
   }
 
   if (count == 3) {
-    if (ccw(pts[0], pts[1], pts[2]) > 0.0f) {
-      DrawTriangle(pts[0], pts[1], pts[2], fill_color);
-    } else {
-      DrawTriangle(pts[0], pts[2], pts[1], fill_color);
+    DrawTriangle(pts[0], pts[1], pts[2], fill_color);
+    DrawTriangle(pts[0], pts[2], pts[1], fill_color);
+  } else if (count > 3) {
+    // Robust fan fallback
+    for (int k = 1; k < count - 1; k++) {
+      DrawTriangle(pts[0], pts[k], pts[k + 1], fill_color);
+      DrawTriangle(pts[0], pts[k + 1], pts[k], fill_color);
     }
   }
 }
@@ -602,11 +621,8 @@ static void draw_styled_ngon(Vector2 center, Vector2 apex, int sides, float thic
   if (filled) {
     for (int i = 0; i < sides; i++) {
       int next = (i + 1) % sides;
-      if (ccw(center, pts[i], pts[next]) > 0.0f) {
-        DrawTriangle(center, pts[i], pts[next], fill_color);
-      } else {
-        DrawTriangle(center, pts[next], pts[i], fill_color);
-      }
+      DrawTriangle(center, pts[i], pts[next], fill_color);
+      DrawTriangle(center, pts[next], pts[i], fill_color);
     }
   }
 
@@ -648,9 +664,9 @@ static void draw_styled_circle(Vector2 center, float r, float thickness, Color c
       DrawRing(center, fmaxf(0.0f, r - radius), r + radius, a0, a1, 8, color);
     }
   } else if (style == STYLE_DOTTED) {
-    float dot_r = fmaxf(radius, 1.5f);
-    float g_len = fmaxf(dash_gap, dot_r * 2.5f);
-    int steps = (int)(circ / g_len);
+    float dot_r = fmaxf(radius, 1.0f);
+    float step_dist = (dot_r * 2.0f) + fmaxf(dash_gap, 2.0f);
+    int steps = (int)(circ / step_dist);
     if (steps < 4) steps = 4;
     float angle_per_step = (2.0f * PI) / (float)steps;
 
@@ -1149,7 +1165,7 @@ void draw_layer_normal(DrawLayer layer) {
   if (g_state->poly_active && g_state->poly_pts_count > 0) {
     DrawLayer active_layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
     if (layer == active_layer) {
-      Vector2 spos = get_cursor_screen_pos();
+      Vector2 spos = get_precision_cursor_screen_pos();
       Vector2 wpos = to_texture_coords(spos);
 
       if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
@@ -1164,6 +1180,19 @@ void draw_layer_normal(DrawLayer layer) {
         }
       }
       Vector2 cur_screen = to_screen_coords(wpos);
+
+      // Live fill preview during polygon creation
+      if (g_state->shape_filled && g_state->poly_pts_count >= 2) {
+        int pn = g_state->poly_pts_count + 1;
+        Vector2* prev_pts = malloc(sizeof(Vector2) * pn);
+        assert(prev_pts);
+        for (int i = 0; i < g_state->poly_pts_count; i++) prev_pts[i] = to_screen_coords(g_state->poly_pts[i]);
+        prev_pts[pn - 1] = cur_screen;
+        Color pfc = g_state->fill_color;
+        pfc.a = (unsigned char)(g_state->shape_fill_opacity * 255.0f * 0.7f);
+        draw_filled_polygon(prev_pts, pn, pfc);
+        free(prev_pts);
+      }
 
       float screen_thickness = g_state->shape_thickness * g_state->zoom * 2.0f;
       float d_len = g_state->shape_dash_len * g_state->zoom;
@@ -1429,17 +1458,16 @@ void handle_draw(void) {
   if (g_state->toolbox_open && toolbox_is_mouse_over()) return;
   if (g_state->keymaps_open) return;
 
-  bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
   bool pen_btn = g_tablet.present && (g_tablet.button1 || g_tablet.button2 || g_tablet.button3);
-  bool pen_click = g_tablet.pen_just_pressed && !pen_btn && !ctrl;
-  bool pen_down = g_tablet.logical_pen_down && !pen_btn && !ctrl;
+  bool pen_click = g_tablet.pen_just_pressed && !pen_btn;
+  bool pen_down = g_tablet.logical_pen_down && !pen_btn;
   bool right_click = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || pen_click;
   bool right_held = IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || pen_down;
 
   // Text tool click placement (STRICTLY Right-click or tablet pen)
   if (g_state->current_tool == TOOL_TEXT) {
     if (right_click) {
-      Vector2 pos = get_cursor_screen_pos();
+      Vector2 pos = get_precision_cursor_screen_pos();
       text_commit_current();
       g_state->is_editing_text = true;
       g_state->text_edit_world_pos = to_texture_coords(pos);
@@ -1459,7 +1487,7 @@ void handle_draw(void) {
   // Step badge click placement (STRICTLY Right-click or tablet pen)
   if (g_state->current_tool == TOOL_STEP_BADGE) {
     if (right_click) {
-      Vector2 pos = get_cursor_screen_pos();
+      Vector2 pos = get_precision_cursor_screen_pos();
       DrawLayer layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
       stroke_begin(layer, TOOL_STEP_BADGE, SHAPE_STEP_BADGE, g_state->shape_thickness, g_state->shape_border_color);
       stroke_add_point(to_texture_coords(pos));
@@ -1474,7 +1502,7 @@ void handle_draw(void) {
   // Polygon point placement (STRICTLY Right-click or tablet pen)
   if (g_state->current_tool == TOOL_POLYGON) {
     if (right_click) {
-      Vector2 spos = get_cursor_screen_pos();
+      Vector2 spos = get_precision_cursor_screen_pos();
       Vector2 wpos = to_texture_coords(spos);
 
       static double s_last_poly_click = 0;
@@ -1524,7 +1552,7 @@ void handle_draw(void) {
   // Left-click is STRICTLY PAN ONLY! Drawing is STRICTLY Right-click or tablet pen!
   bool should_draw = right_held;
 
-  Vector2 pos   = get_cursor_screen_pos();
+  Vector2 pos   = get_precision_cursor_screen_pos();
   DrawLayer layer = g_state->black_board_enabled ? LAYER_BLACKBOARD : LAYER_IMAGE;
 
   if (should_draw) {
@@ -1605,12 +1633,12 @@ void handle_draw(void) {
               s_active_stroke->ngon_sides = g_state->ngon_sides;
             }
           }
-          // Table arrow keys while dragging
+          // Table arrow and W/S/A/D keys while dragging
           if (s_active_stroke->type == SHAPE_TABLE) {
-            if (IsKeyPressed(KEY_UP)) { g_state->table_rows++; s_active_stroke->table_rows = g_state->table_rows; }
-            if (IsKeyPressed(KEY_DOWN) && g_state->table_rows > 1) { g_state->table_rows--; s_active_stroke->table_rows = g_state->table_rows; }
-            if (IsKeyPressed(KEY_RIGHT)) { g_state->table_cols++; s_active_stroke->table_cols = g_state->table_cols; }
-            if (IsKeyPressed(KEY_LEFT) && g_state->table_cols > 1) { g_state->table_cols--; s_active_stroke->table_cols = g_state->table_cols; }
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) { g_state->table_rows++; s_active_stroke->table_rows = g_state->table_rows; }
+            if ((IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) && g_state->table_rows > 1) { g_state->table_rows--; s_active_stroke->table_rows = g_state->table_rows; }
+            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) { g_state->table_cols++; s_active_stroke->table_cols = g_state->table_cols; }
+            if ((IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) && g_state->table_cols > 1) { g_state->table_cols--; s_active_stroke->table_cols = g_state->table_cols; }
           }
           StrokeLayer* l = get_active_layer();
           l->dirty = true;

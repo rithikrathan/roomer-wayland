@@ -124,6 +124,8 @@ typedef struct {
   float       tool_highlighter_size;
   Color       color1;
   Color       color2;
+  Color       fill_color1;
+  Color       fill_color2;
   int         active_swatch;
   bool        black_board_enabled;
   int         image_w;
@@ -261,6 +263,8 @@ void keymaps_render(void);
 void hud_tooltip_show(const char* text);
 void hud_tooltip_render(void);
 void tool_notify_current(void);
+void swatch_set_active(int idx);
+void swatch_swap(void);
 
 #define HIGHLIGHTER_ALPHA 0.3f
 
