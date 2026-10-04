@@ -170,6 +170,13 @@ int main(int argc, char** argv) {
 
   g_state->image_w = img.width;
   g_state->image_h = img.height;
+  if (img.width > 0 && img.height > 0) {
+    g_state->pan.x = ((float)GetScreenWidth() - (float)img.width * g_state->zoom) / 2.0f;
+    g_state->pan.y = ((float)GetScreenHeight() - (float)img.height * g_state->zoom) / 2.0f;
+    g_state->target_pan = g_state->pan;
+    g_initial_state.pan = g_state->pan;
+    g_initial_state.target_pan = g_state->target_pan;
+  }
 
   tablet_init();
 

@@ -162,6 +162,13 @@ void reset_all_variables(bool clear_drawings) {
   *g_state = g_initial_state;
   g_state->image_w = w;
   g_state->image_h = h;
+  if (w > 0 && h > 0) {
+    float fw = (float)GetScreenWidth();
+    float fh = (float)GetScreenHeight();
+    g_state->target_pan.x = (fw - (float)w * g_state->target_zoom) / 2.0f;
+    g_state->target_pan.y = (fh - (float)h * g_state->target_zoom) / 2.0f;
+    g_state->pan = g_state->target_pan;
+  }
   g_configuration->draw_color = g_state->color1;
   hud_tooltip_show(clear_drawings ? "Reset All (Initial State)" : "Variables Reinitialized");
 }
@@ -231,13 +238,13 @@ static void handle_zoom(void) {
 
   float delta = (wheel != 0) ? wheel * g_configuration->zoom_step : keyboard_delta;
   if (delta != 0 && !g_state->is_drawing && !g_state->flashlight_enabled) {
-    Vector2 mouse_pos     = GetMousePosition();
+    Vector2 anchor = (wheel != 0) ? GetMousePosition() : (Vector2){ (float)GetScreenWidth() / 2.0F, (float)GetScreenHeight() / 2.0F };
     float   prev_zoom     = g_state->zoom;
-    Vector2 world         = { (mouse_pos.x - g_state->pan.x) / prev_zoom, (mouse_pos.y - g_state->pan.y) / prev_zoom };
+    Vector2 world         = { (anchor.x - g_state->pan.x) / prev_zoom, (anchor.y - g_state->pan.y) / prev_zoom };
     float   mult          = (wheel != 0 && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) ? 0.33F : 1.0F;
     g_state->target_zoom  = Clamp(g_state->target_zoom + delta * mult, g_configuration->zoom_min, g_configuration->zoom_max);
-    g_state->target_pan.x = mouse_pos.x - world.x * g_state->target_zoom;
-    g_state->target_pan.y = mouse_pos.y - world.y * g_state->target_zoom;
+    g_state->target_pan.x = anchor.x - world.x * g_state->target_zoom;
+    g_state->target_pan.y = anchor.y - world.y * g_state->target_zoom;
   }
 }
 

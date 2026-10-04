@@ -392,7 +392,13 @@ void toolbox_handle_input(void) {
       float sl_w = BOX_W - BOX_PAD * 2 - 45 - 45;
       float t = Clamp((m.x - sl_x) / sl_w, 0.0f, 1.0f);
       float s = -1.0F + t * 2.0F;
-      g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
+      float new_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
+      Vector2 center = { (float)GetScreenWidth() / 2.0F, (float)GetScreenHeight() / 2.0F };
+      float prev_zoom = g_state->zoom > 0.001f ? g_state->zoom : 1.0f;
+      Vector2 world_center = { (center.x - g_state->pan.x) / prev_zoom, (center.y - g_state->pan.y) / prev_zoom };
+      g_state->target_zoom = new_zoom;
+      g_state->target_pan.x = center.x - world_center.x * new_zoom;
+      g_state->target_pan.y = center.y - world_center.y * new_zoom;
       return;
     }
     s_dragging_zoom = false;
@@ -776,7 +782,13 @@ void toolbox_handle_input(void) {
     s_dragging_zoom = true;
     float t = Clamp((m.x - zsl_x) / zsl_w, 0.0F, 1.0F);
     float s = -1.0F + t * 2.0F;
-    g_state->target_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
+    float new_zoom = Clamp(slider_to_zoom(s), g_configuration->zoom_min, g_configuration->zoom_max);
+    Vector2 center = { (float)GetScreenWidth() / 2.0F, (float)GetScreenHeight() / 2.0F };
+    float prev_zoom = g_state->zoom > 0.001f ? g_state->zoom : 1.0f;
+    Vector2 world_center = { (center.x - g_state->pan.x) / prev_zoom, (center.y - g_state->pan.y) / prev_zoom };
+    g_state->target_zoom = new_zoom;
+    g_state->target_pan.x = center.x - world_center.x * new_zoom;
+    g_state->target_pan.y = center.y - world_center.y * new_zoom;
     return;
   }
 
